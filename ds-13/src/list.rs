@@ -20,8 +20,15 @@ pub enum Node<T> {
 }
 
 
-impl<T> List<T> {
+impl<T> List<T> 
+where
+    T: Clone,
+{
     pub fn empty() -> List<T> {
+        List { head: Rc::new( Node::<T>::Empty ) }
+    }
+
+    pub fn new() -> List<T> {
         List { head: Rc::new( Node::<T>::Empty ) }
     }
 
@@ -85,39 +92,63 @@ macro_rules! list {
 }
 
 
-impl<'a, T> IntoIterator for &'a List<T> {
-    type Item = &'a T;
-    type IntoIter = ListIterator<'a, T>;
+impl<T> IntoIterator for List<T> 
+where
+    T: Clone,
+{
+    type Item = T;
+    type IntoIter = ListIterator<T>;
 
     fn into_iter(self) -> Self::IntoIter {
-        ListIterator { _next: &self.head }
+        ListIterator { _next: Rc::clone(&self.head) }
     }
 }
 
-pub struct ListIterator<'a, T> {
-    _next: &'a Rc<Node<T>>
+impl<T> IntoIterator for &List<T> 
+where
+    T: Clone,
+{
+    type Item = T;
+    type IntoIter = ListIterator<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        ListIterator { _next: Rc::clone(&self.head) }
+    }
 }
 
-impl<'a, T> Iterator for ListIterator<'a, T> {
-    type Item = &'a T;
+pub struct ListIterator<T> {
+    _next: Rc<Node<T>>
+}
+
+impl<T> Iterator for ListIterator<T>
+where
+    T: Clone,
+{
+    type Item = T;
     fn next(&mut self) -> Option<Self::Item> {
-        match &**self._next {
-            Node::Empty => None,
-            Node::Link(head, tail) => {
-                self._next = tail;
-                Some(head)
-            }
-        }
+
+        let (result, new_next) = match &*self._next {
+            Node::Empty => (None, Rc::clone(&self._next)),
+            Node::Link(head, tail) => (Some(head.clone()), Rc::clone(tail)),
+        };
+        self._next = new_next;
+        result
     }
 }
 
-impl<T> Clone for List<T> {
+impl<T> Clone for List<T> 
+where
+    T: Clone,
+{
     fn clone(&self) -> Self {
         List::from_node(&Rc::clone(&self.head))
     }
 }
 
-impl<T: fmt::Display> fmt::Display for List<T> {
+impl<T> fmt::Display for List<T> 
+where
+    T: Clone + fmt::Display,
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "list [")?;
         for x in self {
@@ -127,7 +158,10 @@ impl<T: fmt::Display> fmt::Display for List<T> {
     }
 }
 
-impl<T: PartialEq> PartialEq for List<T> {
+impl<T> PartialEq for List<T> 
+where
+    T: PartialEq + Clone,
+{
     fn eq(&self, other: &Self) -> bool {
         self.into_iter().zip_longest(other.into_iter()).all(|x| matches!(x, EitherOrBoth::Both(a, b) if a == b))
     }
@@ -167,10 +201,14 @@ pub fn reverse<T: Clone>(list: &List<T>) -> List<T> {
     )
 }
 
-pub fn fmap<U, T>(f: impl Fn(&T) -> U, list: &List<T>) -> List<U> {
+pub fn fmap<U, T>(f: impl Fn(&T) -> U, list: &List<T>) -> List<U> 
+where
+    T: Clone,
+    U: Clone,
+{
     let mut result = List::<U>::empty();
     for x in list {
-        result = result.pushed_front(f(x));
+        result = result.pushed_front(f(&x));
     }
     result
     // match list.front() {
@@ -179,14 +217,20 @@ pub fn fmap<U, T>(f: impl Fn(&T) -> U, list: &List<T>) -> List<U> {
     // }
 }
 
-pub fn foldl<U, T>(f: impl FnOnce(U, &T) -> U + Copy, acc: U, list: &List<T>) -> U {
+pub fn foldl<U, T>(f: impl FnOnce(U, &T) -> U + Copy, acc: U, list: &List<T>) -> U 
+where
+    T: Clone,
+{
     match list.front() {
         None => acc,
         Some(head) => foldl(f, f(acc, head), &list.popped_front())
     }
 }
 
-pub fn foldr<U, T>(f: impl FnOnce(&T, U) -> U + Copy, acc: U, list: &List<T>) -> U {
+pub fn foldr<U, T>(f: impl FnOnce(&T, U) -> U + Copy, acc: U, list: &List<T>) -> U 
+where
+    T: Clone,
+{
     match list.front() {
         None => acc,
         Some(head) => f(head, foldr(f, acc, &list.popped_front()))
@@ -225,7 +269,10 @@ pub fn concat_all<T: Clone>(xss: &List<List<T>>) -> List<T> {
 }
 
 // List Monad
-pub fn mreturn<T>(t: T) -> List<T> {
+pub fn mreturn<T>(t: T) -> List<T> 
+where
+    T: Clone,
+{
     List::cons(t, &List::empty())
 }
 

@@ -1,8 +1,20 @@
-fn main() {
+use futures::pin_mut;
+use futures::stream::Stream;
+use futures::stream::StreamExt;
+use tokio::prelude::*;
+
+#![recursion_limit="256"]
+#[tokio::main]
+async fn main() {
     use std::time::Instant;
     use std::fs::File;
     use std::io::{BufWriter, Write};
     use itertools::Itertools;
+    use kxparser::domain::models::{
+        grammar::{Rule},
+    };
+    use kxparser::domain::services::chart_parsing::{earley, parse};
+    use kxparser::utilities::container::leftcorners_dict;
 
     let grammar = match parser::read_grammar_from_ron_file("grammar.ron") {
         Ok(grammar) => grammar,
@@ -10,35 +22,35 @@ fn main() {
             println!("error reading 'grammar.ron': {}", e);
             println!("loading default ...");
             vec!(
-                parser::Rule {
+                Rule {
                     lhs: String::from("S"),
                     rhs: vec!(
                         String::from("NP"),
                         String::from("VP")
                     ),
                 },
-                parser::Rule {
+                Rule {
                     lhs: String::from("VP"),
                     rhs: vec!(String::from("Verb"),)
                 },
-                parser::Rule {
+                Rule {
                     lhs: String::from("VP"),
                     rhs: vec!(String::from("Verb"), String::from("NP")) },
-                parser::Rule { lhs: String::from("VP"),   rhs: vec!(String::from("VP"), String::from("PP")) },
-                parser::Rule { lhs: String::from("NP"),   rhs: vec!(String::from("Det"), String::from("Noun")) },
-                parser::Rule { lhs: String::from("NP"),   rhs: vec!(String::from("NP"), String::from("PP")) },
-                parser::Rule { lhs: String::from("PP"),   rhs: vec!(String::from("Prep"), String::from("NP")) },
-                parser::Rule { lhs: String::from("Verb"), rhs: vec!(String::from("sees"),) },
-                parser::Rule { lhs: String::from("Det"),  rhs: vec!(String::from("the"),) },
-                parser::Rule { lhs: String::from("Det"),  rhs: vec!(String::from("a"),) },
-                parser::Rule { lhs: String::from("Prep"), rhs: vec!(String::from("under"),) },
-                parser::Rule { lhs: String::from("Prep"), rhs: vec!(String::from("with"),) },
-                parser::Rule { lhs: String::from("Prep"), rhs: vec!(String::from("in"),) },
-                parser::Rule { lhs: String::from("Noun"), rhs: vec!(String::from("zebra"),) },
-                parser::Rule { lhs: String::from("Noun"), rhs: vec!(String::from("lion"),) },
-                parser::Rule { lhs: String::from("Noun"), rhs: vec!(String::from("tree"),) },
-                parser::Rule { lhs: String::from("Noun"), rhs: vec!(String::from("park"),) },
-                parser::Rule { lhs: String::from("Noun"), rhs: vec!(String::from("telescope"),) },
+                Rule { lhs: String::from("VP"),   rhs: vec!(String::from("VP"), String::from("PP")) },
+                Rule { lhs: String::from("NP"),   rhs: vec!(String::from("Det"), String::from("Noun")) },
+                Rule { lhs: String::from("NP"),   rhs: vec!(String::from("NP"), String::from("PP")) },
+                Rule { lhs: String::from("PP"),   rhs: vec!(String::from("Prep"), String::from("NP")) },
+                Rule { lhs: String::from("Verb"), rhs: vec!(String::from("sees"),) },
+                Rule { lhs: String::from("Det"),  rhs: vec!(String::from("the"),) },
+                Rule { lhs: String::from("Det"),  rhs: vec!(String::from("a"),) },
+                Rule { lhs: String::from("Prep"), rhs: vec!(String::from("under"),) },
+                Rule { lhs: String::from("Prep"), rhs: vec!(String::from("with"),) },
+                Rule { lhs: String::from("Prep"), rhs: vec!(String::from("in"),) },
+                Rule { lhs: String::from("Noun"), rhs: vec!(String::from("zebra"),) },
+                Rule { lhs: String::from("Noun"), rhs: vec!(String::from("lion"),) },
+                Rule { lhs: String::from("Noun"), rhs: vec!(String::from("tree"),) },
+                Rule { lhs: String::from("Noun"), rhs: vec!(String::from("park"),) },
+                Rule { lhs: String::from("Noun"), rhs: vec!(String::from("telescope"),) },
             ) 
         }
     };
@@ -57,7 +69,7 @@ fn main() {
     }
     // println!("start rule: {}", grammar.rules[0]);
 
-    for (lc, rules) in parser::leftcorners_dict(&grammar) {
+    for (lc, rules) in leftcorners_dict(&grammar) {
         println!("{:10}: {}", lc, rules.iter().format("      "));
     }
 
@@ -99,7 +111,7 @@ fn main() {
 
     let now = Instant::now();
     parser::test(
-        parser::earley2,
+        earley,
         &grammar,
         "S",
         &parser::example(3),
@@ -109,7 +121,7 @@ fn main() {
 
     let now = Instant::now();
     parser::test(
-        parser::earley2,
+        earley,
         &grammar,
         "S",
         &parser::example(3),
@@ -117,6 +129,11 @@ fn main() {
     );
     println!("earley2, elapsed time: {:.6?}", now.elapsed());
 
+    let parse_trees = parse(&grammar, "S", &parser::example(3));
+    pin_mut!(parse_trees);
+    while let Some(tree) = parse_trees.next().await {
+        println!("{:?}", tree);
+    }
 
 }
 
@@ -129,6 +146,12 @@ mod parser {
     };
     use ron::Result;
     use serde::{Deserialize, Serialize};
+    use kxparser::domain::models::{
+        Rule,
+        Chart,
+        Edge,
+    };
+    use kxparser::domain::services::print::print_chart;
 
     const EXAMPLE_PREFIX: [&'static str; 5] = [
         "the",
@@ -149,12 +172,6 @@ mod parser {
         "park",
     ];
 
-    pub struct Rule {
-        pub lhs: String,
-        pub rhs: Vec<String>,
-    }
-
-
     pub fn read_grammar_from_ron_file(file_name: &str) -> ron::Result<Vec<Rule>> {
         let f = File::open(file_name)?;
         let grammar: ron::Result<Vec<Rule>> = ron::de::from_reader(f);
@@ -171,14 +188,6 @@ mod parser {
             .map(|x| *x).collect()
     }
 
-    pub fn leftcorners_dict<'a>(grammar: &'a [Rule]) -> HashMap<&'a str, Vec<&Rule>> {
-        let mut leftcorners = HashMap::new();
-        for rule in grammar {
-            let entry = leftcorners.entry(rule.rhs[0].as_str()).or_insert(Vec::new());
-            entry.push(rule);
-        }
-        leftcorners
-    }
 
     pub fn success(chart: &Chart, cat: &str, start: usize) -> bool {
         // println!("chart.chart.last() = {:?}", *chart.chart.last().unwrap());
@@ -213,24 +222,6 @@ mod parser {
         print_chart(&chart, positions, None);
     }
 
-    pub fn print_chart(chart: &Chart, positions: &[i32], cutoff: Option<usize>) {
-        let cutoff: usize = cutoff.unwrap_or(8);
-        println!("Chart size: {} edges", chartsize(chart));
-        for (k, edgeset) in chart.chart.iter().enumerate() {
-            if edgeset.len() > 0 && (positions.contains(&(k as i32)) || positions.contains(&(k as i32 - chart.chart.len() as i32))) {
-                println!("{} edges ending in position {}:", edgeset.len(), k);
-                let mut sorted_edgeset = edgeset.to_vec();
-                sorted_edgeset.sort();
-                for (n, edge) in sorted_edgeset.iter().enumerate() {
-                    if cutoff > 0 && n >= cutoff {
-                        println!("    ...");
-                        break;
-                    }
-                    println!("    {}", edge);
-                }
-            }
-        }
-    }
     pub fn earley1<'a>(grammar: &'a [Rule], input: &[&'a str]) -> Chart<'a> {
         let mut result = Chart {
             chart: Vec::new(),
@@ -310,204 +301,96 @@ mod parser {
         result
     }
 
-    pub fn earley2<'a>(grammar: &'a [Rule], input: &[&'a str]) -> Chart<'a> {
-        let leftcorners = leftcorners_dict(grammar);
-
-        let mut chart: Vec<HashMap<Option<&str>, HashSet<Edge>>> = Vec::new();
-        {
-            let mut entry_0 = HashMap::new();
-            entry_0.insert(None, HashSet::new());
-            chart.push(entry_0);
-        }
-
-        for (k, sym) in input.iter().enumerate() {
-            let k = k + 1;
-
-            let mut lc_edgesets = HashMap::new();
-
-            // Scan
-            let mut agenda = vec!(Edge {
-                start: k-1,
-                end: k,
-                lhs: sym,
-                rhs: Vec::new(),
-                dot: 0,
-            });
-
-            while agenda.len() > 0 {
-                // println!("agenda = {:?}", agenda);
-
-                let edge = match agenda.pop() {
-                    Some(edge) => edge,
-                    None => panic!("no edge")
-                };
-
-                let leftc = match edge.is_passive() {
-                    true => None,
-                    false => Some(edge.rhs[edge.dot])
-                };
-                let edgeset = lc_edgesets.entry(leftc).or_insert(HashSet::<Edge>::new());
-
-                if !edgeset.contains(&edge) {
-                    if edge.is_passive() {
-                        // Predict
-                        if leftcorners.contains_key(edge.lhs) {
-                            let rules = &leftcorners[edge.lhs];
-                            for rule in rules {
-                                agenda.push(
-                                    Edge {
-                                        start: edge.start,
-                                        end: k,
-                                        lhs: &rule.lhs,
-                                        rhs: rule.rhs.iter().map(String::as_str).collect(),
-                                        dot: 1,
-                                    }
-                                );
-                            }
-                        }
-
-                        // Complete
-                        if chart[edge.start].contains_key(&Some(edge.lhs)) {
-                            for e in &chart[edge.start][&Some(edge.lhs)] {
-                                agenda.push(
-                                    Edge {
-                                        start: e.start,
-                                        end: k,
-                                        lhs: e.lhs,
-                                        rhs: e.rhs.iter().map(|x| *x).collect(),
-                                        dot: e.dot + 1,
-                                    }
-                                );
-                            }
-                        }
-                    } // if edge is passive
-                    edgeset.insert(edge);
-                } // if edge not in edgeset
-            } // while agenda
-            chart.push(lc_edgesets);
-        } // for input
-
-        let mut result = Chart::new();
-        for lc_edgeset in chart {
-            let mut part = Vec::new();
-            for edge in lc_edgeset.get(&None).unwrap() {
-                part.push(edge.clone())
-            }
-            result.chart.push(part);
-        }
-        result
-    }
     
-    #[derive(Clone, Debug)]
-    pub struct Tree {
-        root: String,
-        children: Vec<Tree>,
-    }
 
-    impl Tree {
-        pub fn new(root: &str, children: Vec<Tree>) -> Self {
-            Tree { 
-                root: root.to_string(),  
-                children: children 
-            }
-        }
-
-        pub fn leaf(root: &str) -> Self {
-            Tree {
-                root: root.to_string(),
-                children: Vec::new()
-            }
-        }
-    }
-
-    pub fn earley3<'a>(grammar: &'a [Rule], input: &[&'a str]) -> Chart<'a> {
-        let leftcorners = leftcorners_dict(grammar);
-
-        let mut chart: Vec<HashMap<Option<&str>, HashSet<Edge>>> = Vec::new();
-        {
-            let mut entry_0 = HashMap::new();
-            entry_0.insert(None, HashSet::new());
-            chart.push(entry_0);
-        }
-
-        for (k, sym) in input.iter().enumerate() {
-            let k = k + 1;
-
-            let mut lc_edgesets = HashMap::new();
-
-            // Scan
-            let mut agenda = vec!(Edge::with_result(
-                k-1,
-                k,
-                sym,
-                Vec::new(),
-                0,
-                )
-            );
-
-            while agenda.len() > 0 {
-                // println!("agenda = {:?}", agenda);
-
-                let edge = match agenda.pop() {
-                    Some(edge) => edge,
-                    None => panic!("no edge")
-                };
-
-                let leftc = match edge.is_passive() {
-                    true => None,
-                    false => Some(edge.rhs[edge.dot])
-                };
-                let edgeset = lc_edgesets.entry(leftc).or_insert(HashSet::<Edge>::new());
-
-                if !edgeset.contains(&edge) {
-                    if edge.is_passive() {
-                        // Predict
-                        if leftcorners.contains_key(edge.lhs) {
-                            let rules = &leftcorners[edge.lhs];
-                            for rule in rules {
-                                agenda.push(
-                                    Edge {
-                                        start: edge.start,
-                                        end: k,
-                                        lhs: &rule.lhs,
-                                        rhs: rule.rhs.iter().map(String::as_str).collect(),
-                                        dot: 1,
-                                    }
-                                );
-                            }
-                        }
-
-                        // Complete
-                        if chart[edge.start].contains_key(&Some(edge.lhs)) {
-                            for e in &chart[edge.start][&Some(edge.lhs)] {
-                                agenda.push(
-                                    Edge {
-                                        start: e.start,
-                                        end: k,
-                                        lhs: e.lhs,
-                                        rhs: e.rhs.iter().map(|x| *x).collect(),
-                                        dot: e.dot + 1,
-                                    }
-                                );
-                            }
-                        }
-                    } // if edge is passive
-                    edgeset.insert(edge);
-                } // if edge not in edgeset
-            } // while agenda
-            chart.push(lc_edgesets);
-        } // for input
-
-        let mut result = Chart::new();
-        for lc_edgeset in chart {
-            let mut part = Vec::new();
-            for edge in lc_edgeset.get(&None).unwrap() {
-                part.push(edge.clone())
-            }
-            result.chart.push(part);
-        }
-        result
-    }
+//    pub fn earley3<'a>(grammar: &'a [Rule], input: &[&'a str]) -> Chart<'a> {
+//        let leftcorners = leftcorners_dict(grammar);
+//
+//        let mut chart: Vec<HashMap<Option<&str>, HashSet<Edge>>> = Vec::new();
+//        {
+//            let mut entry_0 = HashMap::new();
+//            entry_0.insert(None, HashSet::new());
+//            chart.push(entry_0);
+//        }
+//
+//        for (k, sym) in input.iter().enumerate() {
+//            let k = k + 1;
+//
+//            let mut lc_edgesets = HashMap::new();
+//
+//            // Scan
+//            let mut agenda = vec!(Edge::with_result(
+//                k-1,
+//                k,
+//                sym,
+//                Vec::new(),
+//                0,
+//                )
+//            );
+//
+//            while agenda.len() > 0 {
+//                // println!("agenda = {:?}", agenda);
+//
+//                let edge = match agenda.pop() {
+//                    Some(edge) => edge,
+//                    None => panic!("no edge")
+//                };
+//
+//                let leftc = match edge.is_passive() {
+//                    true => None,
+//                    false => Some(edge.rhs[edge.dot])
+//                };
+//                let edgeset = lc_edgesets.entry(leftc).or_insert(HashSet::<Edge>::new());
+//
+//                if !edgeset.contains(&edge) {
+//                    if edge.is_passive() {
+//                        // Predict
+//                        if leftcorners.contains_key(edge.lhs) {
+//                            let rules = &leftcorners[edge.lhs];
+//                            for rule in rules {
+//                                agenda.push(
+//                                    Edge {
+//                                        start: edge.start,
+//                                        end: k,
+//                                        lhs: &rule.lhs,
+//                                        rhs: rule.rhs.iter().map(String::as_str).collect(),
+//                                        dot: 1,
+//                                    }
+//                                );
+//                            }
+//                        }
+//
+//                        // Complete
+//                        if chart[edge.start].contains_key(&Some(edge.lhs)) {
+//                            for e in &chart[edge.start][&Some(edge.lhs)] {
+//                                agenda.push(
+//                                    Edge {
+//                                        start: e.start,
+//                                        end: k,
+//                                        lhs: e.lhs,
+//                                        rhs: e.rhs.iter().map(|x| *x).collect(),
+//                                        dot: e.dot + 1,
+//                                    }
+//                                );
+//                            }
+//                        }
+//                    } // if edge is passive
+//                    edgeset.insert(edge);
+//                } // if edge not in edgeset
+//            } // while agenda
+//            chart.push(lc_edgesets);
+//        } // for input
+//
+//        let mut result = Chart::new();
+//        for lc_edgeset in chart {
+//            let mut part = Vec::new();
+//            for edge in lc_edgeset.get(&None).unwrap() {
+//                part.push(edge.clone())
+//            }
+//            result.chart.push(part);
+//        }
+//        result
+//    }
     // pub fn format_vec(vec: &Vec<&str>) -> String {
     //     vec.join(" ")
     // }

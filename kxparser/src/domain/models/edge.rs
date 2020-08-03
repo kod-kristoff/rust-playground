@@ -2,14 +2,15 @@ use std::{
     cmp,
     fmt,
 };
+use ds_13::list::List;
 
 #[derive(Debug, Eq, Hash, PartialEq, Clone)]
 pub struct Edge<'a> {
-    start: usize,
-    end: usize,
-    lhs: &'a str,
-    rhs: Vec<&'a str>,
-    dot: usize,
+    pub start: usize,
+    pub end: usize,
+    pub lhs: &'a str,
+    pub rhs: Vec<&'a str>,
+    pub dot: usize,
 }
 
 impl<'a> Edge<'a> {

@@ -16,6 +16,14 @@ enum Colour {
     Red,
     Black
 }
+impl<T> Clone for RBTree<T>
+where
+    T: Clone,
+{
+    fn clone(&self) -> Self {
+        RBTree { root: Rc::clone(&self.root) }
+    }
+}
 
 impl<T: Clone> RBTree<T> {
     pub fn new() -> Self {
@@ -87,6 +95,14 @@ impl<T: Clone> RBTree<T> {
         RBTree::tree(Colour::Black, t.root().unwrap().clone(), &t.left(), &t.right())
     }
 
+    pub fn inserted_or_replaced(&self, x: T) -> Self 
+    where
+        T: PartialOrd,
+    {
+        let t = self.ins_or_rep(x);
+        RBTree::tree(Colour::Black, t.root().unwrap().clone(), &t.left(), &t.right())
+    }
+
     pub fn contains<U>(&self, x: &U) -> bool
     where
         T: PartialOrd<U>,
@@ -99,6 +115,16 @@ impl<T: Clone> RBTree<T> {
         T: PartialOrd<U>
     {
         self.root.get(x)
+    }
+
+    pub fn get_or_default<'a, U>(&'a self, x: &U, default: &'a T) -> &'a T
+    where
+        T: PartialOrd<U>
+    {
+        match self.root.get(x) {
+            Some(v) => v,
+            None => default,
+        }
     }
 
     fn ins(&self, x: T) -> Self
@@ -124,6 +150,39 @@ impl<T: Clone> RBTree<T> {
                     )
                 } else {
                     RBTree::from_node(&self.root)
+                }
+            }
+        }
+    }
+
+    fn ins_or_rep(&self, x: T) -> Self
+    where
+        T: PartialOrd,
+    {
+        match &*self.root {
+            RBNode::Empty => RBTree::leaf(x),
+            RBNode::Node(c, y, left, right) => {
+                if x < *y {
+                    balance(
+                        *c, 
+                        y.clone(), 
+                        &RBTree::from_node(left).ins_or_rep(x),
+                        &RBTree::from_node(right)
+                    )
+                } else if x > *y {
+                    balance(
+                        *c, 
+                        y.clone(), 
+                        &RBTree::from_node(left), 
+                        &RBTree::from_node(right).ins_or_rep(x)
+                    )
+                } else {
+                    RBTree::tree(
+                        *c,
+                        x,
+                        &RBTree::from_node(left),
+                        &RBTree::from_node(right)
+                    )
                 }
             }
         }
@@ -395,5 +454,37 @@ mod tests {
         assert_eq!(t.left().root_colour(), Colour::Black);
         assert_eq!(t.right().root(), Some(&"c"));
         assert_eq!(t.right().root_colour(), Colour::Black);
+    }
+
+    #[derive(Clone, Debug, PartialEq)]
+    struct KV<K, V>(K, V);
+
+    impl<K, V> PartialOrd for KV<K, V>
+    where
+        K: PartialOrd,
+        V: PartialEq,
+    {
+        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+            self.0.partial_cmp(&other.0)
+        }
+    }
+    #[test]
+    fn inserted_or_replaced() {
+        let empty_tree = RBTree::new();
+
+        let t1 = empty_tree.inserted_or_replaced(KV(4, "a"));
+        let t2 = t1.inserted_or_replaced(KV(3, "b"));
+        let t3 = t2.inserted_or_replaced(KV(5, "c"));
+        let t4 = t3.inserted_or_replaced(KV(4, "d"));
+
+        assert_eq!(t3.root(), Some(&KV(4, "a")));
+        assert_eq!(t4.root(), Some(&KV(4, "d")));
+    }
+
+    #[test]
+    fn get_or_default() {
+        let t1 = RBTree::new();
+
+        assert_eq!(t1.get_or_default(&5, &7), &7);
     }
 }

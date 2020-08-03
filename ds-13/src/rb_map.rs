@@ -59,6 +59,7 @@ where
 }
 
 
+
 //pub struct RBMap<K, V> {
 //    root: Rc<RBNode<(K, V)>>,
 //}
@@ -84,10 +85,23 @@ where
         RBMap( self.0.inserted(KeyValue(k, v)) )
     }
 
+    pub fn inserted_or_replaced(&self, k: K, v: V) -> Self {
+        RBMap(
+            self.0.inserted_or_replaced(KeyValue(k, v))
+        )
+    }
+
     pub fn get(&self, k: &K) -> Option<&V> {
         match self.0.get(k) {
             None => None,
             Some(kv) => Some(&kv.1),
+        }
+    }
+
+    pub fn get_or_default<'a>(&'a self, k: &K, default: &'a V) -> &'a V {
+        match self.0.get(k) {
+            None => default,
+            Some(kv) => &kv.1,
         }
     }
 
@@ -98,6 +112,17 @@ where
         }
     }
 }
+
+impl<K, V> Clone for RBMap<K, V>
+where
+    K: Clone,
+    V: Clone,
+{
+    fn clone(&self) -> Self {
+        RBMap(self.0.clone())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -124,5 +149,15 @@ mod tests {
         assert_eq!(m.get_key_value(&6), None);
         assert_eq!(m.get(&5), Some(&"b"));
         assert_eq!(m.get(&6), None);
+    }
+
+    #[test]
+    fn get_or_default() {
+        let m1 = RBMap::new();
+
+        let m = m1.inserted_or_replaced("g", 5);
+
+        assert_eq!(m1.get_or_default(&"g", &0), &0);
+        assert_eq!(m.get_or_default(&"g", &0), &5);
     }
 } // mod tests

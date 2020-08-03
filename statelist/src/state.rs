@@ -1,20 +1,29 @@
+use std::from::From;
 use ds_13::list;
 use ds_13::list::{List, reverse};
 
-// type Plan<'a, State, A> = dyn Fn(&State) -> Pair<A, State>;
-type Plan<'a, State, A> = Box<dyn Fn(&State) -> (A, State) + 'a>;
+type Plan<State, A> = dyn Fn(&State) -> Pair<A, State>;
+// type Plan<'a, State, A> = Box<dyn Fn(&State) -> (A, State) + 'a>;
+//pub struct Plan<State, A>
+//{
+//    func: Fn(&State) -> (A, State),
+//}
+//
+//impl<State, A> Plan<State, A> {
+//    pub fn run(st)
+//}
 
-pub fn make_plan<'a, State, A>(f: &'a dyn Fn(&State) -> (A, State)) -> Plan<'a, State, A> {
-    Box::new(f)
+pub fn make_plan<State, A>(f: &dyn Fn(&State) -> (A, State)) -> Plan<State, A> {
+    f
 }
 pub fn run_plan<State, A>(pl: Plan<State, A>, s: &State) -> (A, State) {
     pl(s)
 }
 
-pub fn mreturn<'a, State: Clone, A: Copy + 'a>(a: A) -> Plan<'a, State, A> {
-    Box::new(move |s: &State| { 
+pub fn mreturn<'a, State: Clone, A: Copy + 'a>(a: A) -> Plan<State, A> {
+    |s: &State| { 
         (a, s.clone()) 
-    })
+    }
 }
 
 pub fn mbind<'a, State: 'a, A: 'a, B>(pl: &'a Plan<'a, State, A>, k: impl Fn(A) -> Plan<'a, State, B> + 'a) -> Plan<'a, State, B> {

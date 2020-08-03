@@ -8,3 +8,6 @@ edition = "2018"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
+ds-13 = { path = "../ds-13" }
+async-stream = "*"
+futures = "*"

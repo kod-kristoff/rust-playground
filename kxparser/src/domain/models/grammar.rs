@@ -8,8 +8,8 @@ pub struct Grammar {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Rule {
-    lhs: String,
-    rhs: Vec<String>,
+    pub lhs: String,
+    pub rhs: Vec<String>,
 }
 
 impl Grammar {

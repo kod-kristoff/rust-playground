@@ -10,3 +10,6 @@ edition = "2018"
 itertools = "0.9"
 ron = "*"
 serde = "*"
+tokio = { version = "0.2", features = ["full"] }
+futures = "*"
+kxparser = { path = "../kxparser" }
