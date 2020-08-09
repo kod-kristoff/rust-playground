@@ -10,71 +10,119 @@ use itertools::{EitherOrBoth, Itertools};
 
 #[derive(Debug)]
 pub struct List<T> {
-    head: Rc<Node<T>>,
+    head: Option<Rc<Node<T>>>,
 }
 
 #[derive(Debug)]
-pub enum Node<T> {
-    Empty,
-    Link(T, Rc<Node<T>>),
+pub struct Node<T> {
+    element: T,
+    next: Option<Rc<Node<T>>>,
 }
 
 
 impl<T> List<T> 
-where
-    T: Clone,
+// where
+//     T: Clone,
 {
     pub fn empty() -> List<T> {
-        List { head: Rc::new( Node::<T>::Empty ) }
+        List { head: None }
     }
 
     pub fn new() -> List<T> {
-        List { head: Rc::new( Node::<T>::Empty ) }
+        List { head: None }
     }
 
-    pub fn cons(head: T, tail: &List<T>) -> List<T> {
+    pub fn cons(element: T, tail: &List<T>) -> List<T> {
+        let next = if let Some(next) = &tail.head {
+            Some(Rc::clone(&next))
+        } else {
+            None
+        };
         List { 
-            head: Rc::new( 
-                Node::Link(
-                    head, 
-                    Rc::clone(&tail.head) 
-                )
-            ) 
+            head: Some(Rc::new( 
+                Node {
+                    element, 
+                    next
+                }
+            ))
         }
     }
 
     fn from_node(tail: &Rc<Node<T>>) -> List<T> {
-        List { head: Rc::clone(tail) }
+        List { head: Some(Rc::clone(tail)) }
     }
 
     pub fn from_value(value: T) -> List<T> {
-        List { head: Rc::new( Node::Link(value, Rc::new( Node::Empty )) ) }
+        List { 
+            head: Some(
+                Rc::new( 
+                    Node { 
+                        element: value, 
+                        next: None
+                    }
+                )
+            )
+        }
     }
 
     pub fn front(&self) -> Option<&T> {
-        match &*self.head {
-            Node::Empty => None,
-            Node::Link(head, _tail) => Some(&head),
+        match &self.head {
+            None => None,
+            Some(head) => Some(&head.element),
         }
     }
 
     pub fn is_empty(&self) -> bool {
-        match &*self.head {
-            Node::Empty => true,
-            _ => false,
-        }
+        self.head.is_none()
     }
 
     pub fn popped_front(&self) -> List<T> {
-        match &*self.head {
-            Node::Empty => panic!("You can't pop an empty list!"),
-            Node::Link(_head, tail) => List::from_node(tail),
+        match &self.head {
+            None => panic!("You can't pop an empty list!"),
+            Some(head) => {
+                match &head.next {
+                    None => List::new(),
+                    Some(node) => List::from_node(&node)
+                }
+            }
         }
+    }
+
+    pub fn head_tail(&self) -> (Option<&T>, List<T>) {
+        let list = match &self.head {
+            None => List::new(),
+            Some(head) => {
+                match &head.next {
+                    None => List::new(),
+                    Some(node) => List::from_node(&node),
+                }
+            }
+        };
+        (self.front(), list)
     }
 
     pub fn pushed_front(&self, value: T) -> List<T> {
         List::cons(value, self)
     }
+
+    pub fn reversed(&self) -> Self
+    where
+        T: Clone,
+    {
+        reverse(self)
+    }
+
+     pub fn iter(&self) -> ListIterator<'_, T> {
+         let next = if let Some(head) = &self.head {
+             Some(Rc::clone(&head))
+         } else {
+             None
+         };
+         ListIterator { 
+             next,
+             phantom: std::marker::PhantomData,
+         }
+     }
 
 }
 
@@ -86,53 +134,89 @@ macro_rules! list {
             $(
                 temp_list = temp_list.pushed_front($x);
              )*
-            reverse(&temp_list)
+            temp_list
         }
     };
 }
 
 
-impl<T> IntoIterator for List<T> 
-where
-    T: Clone,
+//impl<'a, T> Iterator for &'a List<T> 
+////where
+////    List<T>: 'a,
+//// //    T: Clone,
+//{
+//     type Item = &'a T;
+//
+//     fn next(&mut self) -> Option<Self::Item> {
+//        let (result, new_head) = match &*self.head {
+//            Node::Empty => (None, Rc::clone(&self.head)),
+//            Node::Link(head, tail) => (Some(head), Rc::clone(tail)),
+//        };
+//        self.head = new_head;
+//        result
+//     }
+////     type IntoIter = ListIterator<T>;
+//// 
+////     fn into_iter(self) -> Self::IntoIter {
+////         ListIterator { _next: Rc::clone(&self.head) }
+////     }
+//
+//}
+
+//impl<T> Node<T> {
+//    pub fn is_empty(&self) -> bool {
+//        match self {
+//            Self::Empty => true,
+//            _ => false,
+//        }
+//    }
+//}
+impl<'a, T> IntoIterator for &'a List<T> 
+// where
+//     T: Clone,
 {
-    type Item = T;
-    type IntoIter = ListIterator<T>;
+    type Item = &'a T;
+    type IntoIter = ListIterator<'a, T>;
 
     fn into_iter(self) -> Self::IntoIter {
-        ListIterator { _next: Rc::clone(&self.head) }
-    }
-}
-
-impl<T> IntoIterator for &List<T> 
-where
-    T: Clone,
-{
-    type Item = T;
-    type IntoIter = ListIterator<T>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        ListIterator { _next: Rc::clone(&self.head) }
-    }
-}
-
-pub struct ListIterator<T> {
-    _next: Rc<Node<T>>
-}
-
-impl<T> Iterator for ListIterator<T>
-where
-    T: Clone,
-{
-    type Item = T;
-    fn next(&mut self) -> Option<Self::Item> {
-
-        let (result, new_next) = match &*self._next {
-            Node::Empty => (None, Rc::clone(&self._next)),
-            Node::Link(head, tail) => (Some(head.clone()), Rc::clone(tail)),
+        let next = if let Some(head) = &self.head {
+            Some(Rc::clone(&head))
+        } else {
+            None
         };
-        self._next = new_next;
-        result
+        ListIterator { 
+            next,
+            phantom: std::marker::PhantomData
+        }
+    }
+}
+
+pub struct ListIterator<'a, T: 'a> {
+    next: Option<Rc<Node<T>>>,
+    phantom: std::marker::PhantomData<&'a T>,
+}
+
+impl<'a, T> Iterator for ListIterator<'a, T>
+where
+    Self: 'a,
+    T: 'a,
+{
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<&'a T> {
+        if self.next.is_none() {
+            None
+        } else {
+             unsafe {
+                let node = Rc::as_ptr(&self.next.as_ref().unwrap());
+                self.next = if let Some(head) = &(*node).next {
+                    Some(Rc::clone(&head))
+                } else {
+                    None
+                };
+                Some(&(*node).element)
+            }
+        }
     }
 }
 
@@ -141,7 +225,11 @@ where
     T: Clone,
 {
     fn clone(&self) -> Self {
-        List::from_node(&Rc::clone(&self.head))
+        if let Some(head) = &self.head {
+            List::from_node(&Rc::clone(&head)) 
+        } else {
+            List::new()
+        }
     }
 }
 
@@ -163,7 +251,7 @@ where
     T: PartialEq + Clone,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.into_iter().zip_longest(other.into_iter()).all(|x| matches!(x, EitherOrBoth::Both(a, b) if a == b))
+        self.iter().zip_longest(other.iter()).all(|x| matches!(x, EitherOrBoth::Both(a, b) if a == b))
     }
 }
 
@@ -240,20 +328,20 @@ where
 pub fn for_each<T>(list: &List<T>, mut f: impl FnMut(&T) + Copy) {
     let mut node = &list.head;
     loop {
-        match &**node {
-            Node::Empty => break,
-            Node::Link(head, tail) => {
-                f(&head);
-                node = tail;
+        match node {
+            None => break,
+            Some(head) => {
+                f(&head.element);
+                node = &head.next;
             }
         };
     }
 }
 
-pub fn concat<T: Copy>(a: &List<T>, b: &List<T>) -> List<T> {
+pub fn concat<T: Clone>(a: &List<T>, b: &List<T>) -> List<T> {
     match a.front() {
         None => b.clone(),
-        Some(head) => List::cons(*head, &concat(&a.popped_front(), b))
+        Some(head) => List::cons(head.clone(), &concat(&a.popped_front(), b))
     }
 }
 
@@ -285,14 +373,13 @@ pub fn mbind<A: Copy, B: Copy>(list: &List<A>, k: impl Fn(&A) -> List<B> + Copy)
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::list::Node::{Empty, Link};
 
     #[test]
     fn create_empty() {
         let list = List::<i32>::empty();
 
-        match *list.head {
-            Empty => assert!(true),
+        match &list.head {
+            None => assert!(true),
             _ => assert!(false),
         };
         assert!(list.is_empty());
@@ -305,9 +392,10 @@ mod tests {
         let list = List::cons(3, &List::empty());
 
         assert_eq!(list.front(), Some(&3));
-        match &*list.head {
-            Link(head, _tail) => {
-                assert_eq!(head, &3);
+        match &list.head {
+            Some(node) => {
+                assert_eq!(&node.element, &3);
+                assert!(node.next.is_none());
             },
             _ => panic!("Should not be here.")
         };
@@ -338,14 +426,14 @@ mod tests {
     }
 
     #[test]
-    fn list_macro_creates_list_with_right_order() {
+    fn list_macro_creates_list_in_reversed_order() {
         let l1 = list!(1);
         assert_eq!(l1.front(), Some(&1));
         assert!(l1.popped_front().is_empty());
 
         let l2 = list!(1, 2);
-        assert_eq!(l2.front(), Some(&1));
-        assert_eq!(l2.popped_front().front(), Some(&2));
+        assert_eq!(l2.front(), Some(&2));
+        assert_eq!(l2.popped_front().front(), Some(&1));
         assert!(l2.popped_front().popped_front().is_empty());
     }
 
