@@ -9,7 +9,7 @@ use ds_13::list::{List, ListIterator};
 use crate::domain::models::{Rule, Edge, Chart};
 use crate::utilities::container::leftcorners_dict;
 
-pub fn parse<'a>(grammar: &'a [Rule], cat: &'a str, sentence: &[&'a str]) -> impl Stream<Item = Tree> + 'a {
+pub fn parse<'a>(grammar: &'a [Rule], cat: &'a str, sentence: &[&'a str]) -> impl Iterator<Item = Tree> + 'a {
     let chart = earley(grammar, sentence);
     extract_tree(chart, cat)
 }
@@ -102,7 +102,7 @@ pub fn earley<'a>(grammar: &'a [Rule], input: &[&'a str]) -> Chart<'a> {
     result
 }
 
-pub fn extract_tree<'a>(chart: Chart<'a>, cat: &'a str) -> impl Stream<Item = Tree> + 'a {
+pub fn extract_tree<'a>(chart: Chart<'a>, cat: &'a str) -> impl Iterator<Item = Tree> + 'a {
     let start: usize = 0;
     let end = chart.chart.len() - 1;
     let topdowns = {
@@ -118,63 +118,68 @@ pub fn extract_tree<'a>(chart: Chart<'a>, cat: &'a str) -> impl Stream<Item = Tr
         }
         topdowns
     };
-    stream! {
-       let yield_tree = yield_tree(topdowns.clone(), cat, start, Box::new(move |e| e == end));
-       pin_mut!(yield_tree);
-
-       while let Some((tree, _)) = yield_tree.next().await {
-           yield tree;
-       }
+    let mut result = List::new(); 
+    for (tree, _) in yield_tree(topdowns.clone(), cat, start, Box::new(move |e| e == end)) {
+        result = result.pushed_front(tree);
     }
+    result.into_iter()
 }
-fn yield_tree<'a>(topdowns: TopdownMap<'a>, lhs: &'a str, start: usize, test_end: Box<dyn Fn(usize) -> bool>) -> impl Stream<Item = (Tree, usize)> + 'a {
-    stream! {
-        for edge in topdowns.get_or_default(&(lhs, start), &List::new()) {
-            if test_end(edge.end) {
-                let yield_children = yield_children(
-                    topdowns.clone(),
-                    edge.rhs.clone(),
-                    0,
-                    start,
-                    edge.end
-                );
-                pin_mut!(yield_children);
-                while let Some(children) = yield_children.next().await {
-                    yield (Tree::new(lhs, children), edge.end);
-                }
+
+fn yield_tree<'a>(topdowns: TopdownMap<'a>, lhs: &'a str, start: usize, test_end: Box<dyn Fn(usize) -> bool>) -> List<(Tree, usize)> {
+    let mut result = List::new();
+    for edge in topdowns.get_or_default(&(lhs, start), &List::new()) {
+        if test_end(edge.end) {
+            let yield_children = yield_children(
+                topdowns.clone(),
+                edge.rhs.clone(),
+                0,
+                start,
+                edge.end
+            );
+            for children in yield_children {
+                result = result.pushed_front((Tree::new(lhs, children), edge.end));
             }
         }
     }
+    result
 }
 
-fn yield_children<'a>(topdowns: TopdownMap<'a>, rhs: Vec<&'a str>, dot: usize, start: usize, end: usize) -> impl Stream<Item = List<Tree>> + 'a {
-    stream! {
-        if rhs.is_empty() {
-            yield List::new();
-        } else if start == end && dot == rhs.len() {
-            yield List::new();
-        } else if start < end && dot < rhs.len() {
-            let yield_tree = if dot == rhs.len() - 1 {
-                yield_tree(
-                    topdowns.clone(),
-                    rhs[dot],
-                    start,
-                    Box::new(move |e| e == end)
-                )
-            } else {
-                yield_tree(
-                    topdowns.clone(),
-                    rhs[dot],
-                    start,
-                    Box::new(move |e| e < end)
-                )
-            };
-            pin_mut!(yield_tree);
-            while let Some((tree, mid)) = yield_tree.next().await {
-                yield List::cons(tree, &List::new());
+fn yield_children<'a>(topdowns: TopdownMap<'a>, rhs: Vec<&'a str>, dot: usize, start: usize, end: usize) -> List<List<Tree>> {
+    let mut result = List::new();
+    if rhs.is_empty() {
+        result = result.pushed_front(List::new());
+    } else if start == end && dot == rhs.len() {
+        result = result.pushed_front(List::new());
+    } else if start < end && dot < rhs.len() {
+        let yield_tree = if dot == rhs.len() - 1 {
+            yield_tree(
+                topdowns.clone(),
+                rhs[dot],
+                start,
+                Box::new(move |e| e == end)
+            )
+        } else {
+            yield_tree(
+                topdowns.clone(),
+                rhs[dot],
+                start,
+                Box::new(move |e| e < end)
+            )
+        };
+        for (tree, mid) in yield_tree {
+            let yield_children = yield_children(
+                topdowns.clone(),
+                rhs.clone(),
+                dot + 1,
+                mid,
+                end
+            );
+            for trees in yield_children {
+                result = result.pushed_front(List::cons(tree.clone(), &trees));
             }
         }
     }
+    result
 }
 
 type TopdownMap<'a> = RBMap<(&'a str, usize), List<Edge<'a>>>;
@@ -357,6 +362,26 @@ impl Tree {
         Tree {
             root: root.to_string(),
             children: List::new()
+        }
+    }
+}
+
+impl std::fmt::Display for Tree {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if self.children.is_empty() {
+            write!(fmt, "{}", self.root)
+        } else {
+            write!(fmt, "{}[", self.root)?;
+            let mut children = (&self.children).into_iter();
+            let mut prev = children.next().unwrap();
+            while let Some(next) = children.next() {
+                write!(fmt, "{} ", prev)?;
+                prev = next;
+            }
+            //for child in &self.children {
+            //    write!(fmt, "{} ", child)?;
+            //}
+            write!(fmt, "{}]", prev)
         }
     }
 }

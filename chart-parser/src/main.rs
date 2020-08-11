@@ -3,9 +3,9 @@ use futures::stream::Stream;
 use futures::stream::StreamExt;
 use tokio::prelude::*;
 
-#![recursion_limit="256"]
-#[tokio::main]
-async fn main() {
+//#![recursion_limit="256"]
+//#[tokio::main]
+fn main() {
     use std::time::Instant;
     use std::fs::File;
     use std::io::{BufWriter, Write};
@@ -129,10 +129,8 @@ async fn main() {
     );
     println!("earley2, elapsed time: {:.6?}", now.elapsed());
 
-    let parse_trees = parse(&grammar, "S", &parser::example(3));
-    pin_mut!(parse_trees);
-    while let Some(tree) = parse_trees.next().await {
-        println!("{:?}", tree);
+    for tree in parse(&grammar, "S", &parser::example(3)) {
+        println!("{}", tree);
     }
 
 }
