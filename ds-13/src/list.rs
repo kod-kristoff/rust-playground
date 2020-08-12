@@ -3,11 +3,6 @@ use std::fmt;
 use std::rc::Rc;
 use itertools::{EitherOrBoth, Itertools};
 
-// pub enum List<T> {
-//      Empty,
-//      Head(Rc<Node<T>>),
-// }
-
 #[derive(Debug)]
 pub struct List<T> {
     head: Option<Rc<Node<T>>>,
@@ -21,8 +16,6 @@ pub struct Node<T> {
 
 
 impl<T> List<T> 
-// where
-//     T: Clone,
 {
     pub fn empty() -> List<T> {
         List { head: None }
@@ -33,16 +26,11 @@ impl<T> List<T>
     }
 
     pub fn cons(element: T, tail: &List<T>) -> List<T> {
-        let next = if let Some(next) = &tail.head {
-            Some(Rc::clone(&next))
-        } else {
-            None
-        };
         List { 
             head: Some(Rc::new( 
                 Node {
                     element, 
-                    next
+                    next: tail.head.clone()
                 }
             ))
         }
@@ -52,24 +40,16 @@ impl<T> List<T>
         List { head: Some(Rc::clone(tail)) }
     }
 
-    pub fn from_value(value: T) -> List<T> {
+    pub fn from_value(element: T) -> List<T> {
         List { 
             head: Some(
-                Rc::new( 
-                    Node { 
-                        element: value, 
-                        next: None
-                    }
-                )
+                Rc::new( Node { element, next: None } )
             )
         }
     }
 
     pub fn front(&self) -> Option<&T> {
-        match &self.head {
-            None => None,
-            Some(head) => Some(&head.element),
-        }
+        self.head.as_ref().map(|node| &node.element)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -77,28 +57,18 @@ impl<T> List<T>
     }
 
     pub fn popped_front(&self) -> List<T> {
-        match &self.head {
-            None => panic!("You can't pop an empty list!"),
-            Some(head) => {
-                match &head.next {
-                    None => List::new(),
-                    Some(node) => List::from_node(&node)
-                }
-            }
+        if self.head.is_none() {
+            panic!("You can't pop an empty list!");
         }
+        List { head: self.head.as_ref().and_then(|node| node.next.clone()) }
+    }
+
+    pub fn tail(&self) -> List<T> {
+        self.popped_front()
     }
 
     pub fn head_tail(&self) -> (Option<&T>, List<T>) {
-        let list = match &self.head {
-            None => List::new(),
-            Some(head) => {
-                match &head.next {
-                    None => List::new(),
-                    Some(node) => List::from_node(&node),
-                }
-            }
-        };
-        (self.front(), list)
+        (self.front(), self.tail())
     }
 
     pub fn pushed_front(&self, value: T) -> List<T> {
@@ -112,16 +82,8 @@ impl<T> List<T>
         reverse(self)
     }
 
-     pub fn iter(&self) -> ListIterator<'_, T> {
-         let next = if let Some(head) = &self.head {
-             Some(Rc::clone(&head))
-         } else {
-             None
-         };
-         ListIterator { 
-             next,
-             phantom: std::marker::PhantomData,
-         }
+     pub fn iter(&self) -> Iter<'_, T> {
+         Iter { next: self.head.as_ref().map(|node| &**node) }
      }
 
 }
@@ -139,103 +101,43 @@ macro_rules! list {
     };
 }
 
-
-//impl<'a, T> Iterator for &'a List<T> 
-////where
-////    List<T>: 'a,
-//// //    T: Clone,
-//{
-//     type Item = &'a T;
-//
-//     fn next(&mut self) -> Option<Self::Item> {
-//        let (result, new_head) = match &*self.head {
-//            Node::Empty => (None, Rc::clone(&self.head)),
-//            Node::Link(head, tail) => (Some(head), Rc::clone(tail)),
-//        };
-//        self.head = new_head;
-//        result
-//     }
-////     type IntoIter = ListIterator<T>;
-//// 
-////     fn into_iter(self) -> Self::IntoIter {
-////         ListIterator { _next: Rc::clone(&self.head) }
-////     }
-//
-//}
-
-//impl<T> Node<T> {
-//    pub fn is_empty(&self) -> bool {
-//        match self {
-//            Self::Empty => true,
-//            _ => false,
-//        }
-//    }
-//}
 impl<'a, T> IntoIterator for &'a List<T> 
-// where
-//     T: Clone,
 {
     type Item = &'a T;
-    type IntoIter = ListIterator<'a, T>;
+    type IntoIter = Iter<'a, T>;
 
     fn into_iter(self) -> Self::IntoIter {
-        let next = if let Some(head) = &self.head {
-            Some(Rc::clone(&head))
-        } else {
-            None
-        };
-        ListIterator { 
-            next,
-            phantom: std::marker::PhantomData
-        }
+        self.iter()
     }
 }
 
-pub struct ListIterator<'a, T: 'a> {
-    next: Option<Rc<Node<T>>>,
-    phantom: std::marker::PhantomData<&'a T>,
+pub struct Iter<'a, T> {
+    next: Option<&'a Node<T>>,
 }
 
-impl<'a, T> Iterator for ListIterator<'a, T>
-where
-    Self: 'a,
-    T: 'a,
+impl<'a, T> Iterator for Iter<'a, T>
 {
     type Item = &'a T;
 
-    fn next(&mut self) -> Option<&'a T> {
-        if self.next.is_none() {
-            None
-        } else {
-             unsafe {
-                let node = Rc::as_ptr(&self.next.as_ref().unwrap());
-                self.next = if let Some(head) = &(*node).next {
-                    Some(Rc::clone(&head))
-                } else {
-                    None
-                };
-                Some(&(*node).element)
-            }
-        }
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next.map(|node| {
+            self.next = node.next.as_ref().map(|node| &**node);
+            &node.element
+        })
     }
 }
 
 impl<T> Clone for List<T> 
-where
-    T: Clone,
 {
     fn clone(&self) -> Self {
-        if let Some(head) = &self.head {
-            List::from_node(&Rc::clone(&head)) 
-        } else {
-            List::new()
-        }
+        List { head: self.head.clone() }
     }
 }
 
+// impl<T: fmt::Debug> fmt::Debug for List<T> {}
 impl<T> fmt::Display for List<T> 
 where
-    T: Clone + fmt::Display,
+    T: fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "list [")?;
@@ -243,6 +145,19 @@ where
             write!(f, "{}", x)?;
         }
         write!(f, "]")
+    }
+}
+
+impl<T> Drop for List<T> {
+    fn drop(&mut self) {
+        let mut head = self.head.take();
+        while let Some(node) = head {
+            if let Ok(mut node) = Rc::try_unwrap(node) {
+                head = node.next.take();
+            } else {
+                break;
+            }
+        }
     }
 }
 
@@ -272,14 +187,6 @@ pub fn filter<T: Copy>(
         
     }
 } 
-
-// pub fn reverse<T: Copy>(list: &List<T>) -> List<T> {
-//     foldl(
-//         |acc: List<T>, v: &T| List::cons(*v, &acc), 
-//         List::empty(),
-//         list
-//     )
-// }
 
 pub fn reverse<T: Clone>(list: &List<T>) -> List<T> {
     foldl(
@@ -358,8 +265,6 @@ pub fn concat_all<T: Clone>(xss: &List<List<T>>) -> List<T> {
 
 // List Monad
 pub fn mreturn<T>(t: T) -> List<T> 
-where
-    T: Clone,
 {
     List::cons(t, &List::empty())
 }
