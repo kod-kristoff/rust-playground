@@ -2,13 +2,17 @@ use std::rc::Rc;
 
 #[derive(Debug)]
 pub struct RBTree<T> {
-    root: Rc<RBNode<T>>,
+    root: Link<T>,
 }
 
+type Link<T> = Option<Rc<RBNode<T>>>;
+
 #[derive(Debug)]
-enum RBNode<T> {
-    Empty,
-    Node(Colour, T, Rc<RBNode<T>>, Rc<RBNode<T>>)
+struct RBNode<T> {
+    colour: Colour, 
+    element: T, 
+    left: Link<T>, 
+    right: Link<T>,
 } 
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -16,75 +20,72 @@ enum Colour {
     Red,
     Black
 }
-impl<T> Clone for RBTree<T>
-where
-    T: Clone,
-{
+
+impl<T> Clone for RBTree<T> {
     fn clone(&self) -> Self {
-        RBTree { root: Rc::clone(&self.root) }
+        RBTree { root: self.root.clone() }
     }
 }
 
 impl<T: Clone> RBTree<T> {
     pub fn new() -> Self {
-        RBTree { root: Rc::new( RBNode::<T>::Empty ) }
+        RBTree { root: None }
     }
 
-    pub fn leaf(value: T) -> Self {
+    pub fn leaf(element: T) -> Self {
         RBTree {
-            root: Rc::new(
-                RBNode::Node(
-                    Colour::Red,
-                    value,
-                    Self::new().root,
-                    Self::new().root
-                )
-            )
+            root: Some( Rc::new(
+                RBNode {
+                    colour: Colour::Red,
+                    element,
+                    left: None,
+                    right: None,
+                }
+            ))
         }
     }
 
     fn tree(colour: Colour, value: T, left: &Self, right: &Self) -> Self {
         RBTree {
-            root: Rc::new(
-                RBNode::Node(colour, value.clone(), Rc::clone(&left.root), Rc::clone(&right.root))
-            ),
+            root: Some( Rc::new(
+                RBNode {
+                    colour, 
+                    element: value.clone(), 
+                    left: left.root.clone(), 
+                    right: right.root.clone(),
+                }
+            )),
         }
     }
     
     fn from_node(node: &Rc<RBNode<T>>) -> Self {
         RBTree {
-            root: node.clone()
+            root: Some( node.clone() ),
         }
     }
 
     pub fn is_empty(&self) -> bool {
-        match &*self.root {
-            RBNode::Empty => true,
-            _ => false,
-        }
+        self.root.is_none()
     }
 
     pub fn root(&self) -> Option<&T> {
-        match &*self.root {
-            RBNode::Empty => None,
-            RBNode::Node(_c, v, _left, _right) => Some(v),
-        }
+        self.root.as_ref().map(|node| &node.element)
     }
 
     fn root_colour(&self) -> Colour {
-        match &*self.root {
-            RBNode::Empty => Colour::Black,
-            RBNode::Node(c, _v, _left, _right) => *c,
-        }
+        self.root.as_ref().map_or(
+            Colour::Black,
+            |node| node.colour
+        )
     }
     pub fn left(&self) -> Self {
-        // assert!(!self.is_empty());
-        Self::from_node(self.root.left()) 
+        assert!(!self.is_empty());
+        Self { root: self.root.as_ref().and_then(|node| node.left.clone()) }
     }
 
     pub fn right(&self) -> Self {
         assert!(!self.is_empty());
-        Self::from_node(self.root.right()) 
+        Self { root: self.root.as_ref().and_then(|node| node.right.clone()) } 
     }
 
     pub fn inserted(&self, x: T) -> Self 
@@ -107,21 +108,21 @@ impl<T: Clone> RBTree<T> {
     where
         T: PartialOrd<U>,
     {
-        self.root.contains(x)
+        self.root.as_ref().map_or_else(|| false, |node| node.contains(x))
     }
 
     pub fn get<U>(&self, x: &U) -> Option<&T>
     where
         T: PartialOrd<U>
     {
-        self.root.get(x)
+        self.root.as_ref().and_then(|node| node.get(x))
     }
 
     pub fn get_or_default<'a, U>(&'a self, x: &U, default: &'a T) -> &'a T
     where
         T: PartialOrd<U>
     {
-        match self.root.get(x) {
+        match self.get(x) {
             Some(v) => v,
             None => default,
         }
@@ -131,25 +132,25 @@ impl<T: Clone> RBTree<T> {
     where
         T: PartialOrd,
     {
-        match &*self.root {
-            RBNode::Empty => RBTree::leaf(x),
-            RBNode::Node(c, y, left, right) => {
-                if x < *y {
+        match &self.root {
+            None => RBTree::leaf(x),
+            Some(node) => {
+                if x < node.element {
                     balance(
-                        *c, 
-                        y.clone(), 
-                        &RBTree::from_node(left).ins(x),
-                        &RBTree::from_node(right)
+                        node.colour, 
+                        node.element.clone(), 
+                        &RBTree { root: node.left.clone() }.ins(x),
+                        &RBTree { root: node.right.clone() }
                     )
-                } else if x > *y {
+                } else if x > node.element {
                     balance(
-                        *c, 
-                        y.clone(), 
-                        &RBTree::from_node(left), 
-                        &RBTree::from_node(right).ins(x)
+                        node.colour, 
+                        node.element.clone(), 
+                        &RBTree { root: node.left.clone() },
+                        &RBTree { root: node.right.clone() }.ins(x)
                     )
                 } else {
-                    RBTree::from_node(&self.root)
+                    RBTree { root: self.root.clone() }
                 }
             }
         }
@@ -159,30 +160,34 @@ impl<T: Clone> RBTree<T> {
     where
         T: PartialOrd,
     {
-        match &*self.root {
-            RBNode::Empty => RBTree::leaf(x),
-            RBNode::Node(c, y, left, right) => {
-                if x < *y {
+        match &self.root {
+            None => RBTree::leaf(x),
+            Some(node) => {
+                if x < node.element {
                     balance(
-                        *c, 
-                        y.clone(), 
-                        &RBTree::from_node(left).ins_or_rep(x),
-                        &RBTree::from_node(right)
+                        node.colour, 
+                        node.element.clone(), 
+                        &RBTree { root: node.left.clone() }.ins_or_rep(x),
+                        &RBTree { root: node.right.clone() }
                     )
-                } else if x > *y {
+                } else if x > node.element {
                     balance(
-                        *c, 
-                        y.clone(), 
-                        &RBTree::from_node(left), 
-                        &RBTree::from_node(right).ins_or_rep(x)
+                        node.colour, 
+                        node.element.clone(), 
+                        &RBTree { root: node.left.clone() },
+                        &RBTree { root: node.right.clone() }.ins_or_rep(x)
                     )
                 } else {
-                    RBTree::tree(
-                        *c,
-                        x,
-                        &RBTree::from_node(left),
-                        &RBTree::from_node(right)
-                    )
+                    RBTree { 
+                        root: Some(Rc::new(
+                            RBNode {
+                                colour: node.colour,
+                                element: x,
+                                left: node.left.clone(),
+                                right: node.right.clone(),
+                                      }
+                                          ))
+                    }
                 }
             }
         }
@@ -278,35 +283,24 @@ where
 
 impl<T> RBNode<T> {
 
-    fn left(&self) -> &Rc<Self> {
-        match self {
-            Self::Node(_c, _v, left, _right) => left,
-            _ => panic!("Can't take left from empty node.")
-        }
+    fn left(&self) -> Option<&Rc<Self>> {
+       self.left.as_ref().map(|node| node) 
     }
 
-    fn right(&self) -> &Rc<Self> {
-        match self {
-            Self::Node(_c, _v, _left, right) => right,
-            _ => panic!("Can't take right from empty node.")
-        }
+    fn right(&self) -> Option<&Rc<Self>> {
+        self.right.as_ref()
     }
 
     fn contains<U>(&self, x: &U) -> bool
     where
         T: PartialOrd<U>,
     {
-        match self {
-            Self::Empty => false,
-            Self::Node(_c, y, left, right) => {
-                if y > x {
-                    left.contains(x)
-                } else if y < x {
-                    right.contains(x)
-                } else {
-                    true
-                }
-            }
+        if &self.element > x {
+            self.left.as_ref().map_or(false, |node| node.contains(x))
+        } else if &self.element < x {
+            self.right.as_ref().map_or(false, |node| node.contains(x))
+        } else {
+            true
         }
     }
 
@@ -314,28 +308,23 @@ impl<T> RBNode<T> {
     where
         T: PartialOrd<U>,
     {
-        match self {
-            Self::Empty => None,
-            Self::Node(_c, y, left, right) => {
-                if y > x {
-                    left.get(x)
-                } else if y < x {
-                    right.get(x)
-                } else {
-                    Some(y)
-                }
-            }
+        if &self.element > x {
+            self.left.as_ref().and_then(|node| node.get(x))
+        } else if &self.element < x {
+            self.right.as_ref().and_then(|node| node.get(x))
+        } else {
+            Some(&self.element)
         }
     }
 }
 
-fn make_empty_node<T>() -> Rc<RBNode<T>> {
-    Rc::new(RBNode::Empty)
-}
-
-fn make_leaf_node<T>(x: T) -> Rc<RBNode<T>> {
-    Rc::new(RBNode::Node(Colour::Red, x, make_empty_node(), make_empty_node()))
-}
+//fn make_empty_node<T>() -> Rc<RBNode<T>> {
+//    Rc::new(RBNode::Empty)
+//}
+//
+//fn make_leaf_node<T>(x: T) -> Rc<RBNode<T>> {
+//    Rc::new(RBNode::Node(Colour::Red, x, make_empty_node(), make_empty_node()))
+//}
 
 impl<T: PartialEq + Clone> PartialEq for RBTree<T> {
     fn eq(&self, other: &Self) -> bool {

@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use crate::rb_tree::{RBTree};
+use crate::unsync::rb_tree::{RBTree};
 
 #[derive(Debug)]
 pub struct KeyValue<K, V>(K, V);

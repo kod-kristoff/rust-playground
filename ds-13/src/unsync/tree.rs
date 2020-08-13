@@ -1,6 +1,6 @@
 use std::rc::Rc;
 use crate::list;
-use crate::list::List;
+use crate::unsync::list::List;
 
 #[derive(Debug)]
 pub struct Tree<T> {
