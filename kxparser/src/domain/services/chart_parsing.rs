@@ -1,15 +1,15 @@
 use std::collections::{HashMap, HashSet};
-use async_stream::stream;
-use futures::stream::Stream;
-use futures::pin_mut;
-use futures::stream::StreamExt;
+// use async_stream::stream;
+// use futures::stream::Stream;
+// use futures::pin_mut;
+// use futures::stream::StreamExt;
 
-use ds_13::rb_map::RBMap;
-use ds_13::list::{List, ListIterator};
+use ds_13::unsync::rb_map::RBMap;
+use ds_13::unsync::list::{List};
 use crate::domain::models::{Rule, Edge, Chart};
 use crate::utilities::container::leftcorners_dict;
 
-pub fn parse<'a>(grammar: &'a [Rule], cat: &'a str, sentence: &[&'a str]) -> impl Iterator<Item = Tree> + 'a {
+pub fn parse<'a>(grammar: &'a [Rule], cat: &'a str, sentence: &[&'a str]) -> List<Tree> {
     let chart = earley(grammar, sentence);
     extract_tree(chart, cat)
 }
@@ -102,7 +102,7 @@ pub fn earley<'a>(grammar: &'a [Rule], input: &[&'a str]) -> Chart<'a> {
     result
 }
 
-pub fn extract_tree<'a>(chart: Chart<'a>, cat: &'a str) -> impl Iterator<Item = Tree> + 'a {
+pub fn extract_tree<'a>(chart: Chart<'a>, cat: &'a str) -> List<Tree> {
     let start: usize = 0;
     let end = chart.chart.len() - 1;
     let topdowns = {
@@ -118,11 +118,11 @@ pub fn extract_tree<'a>(chart: Chart<'a>, cat: &'a str) -> impl Iterator<Item = 
         }
         topdowns
     };
-    let mut result = List::new(); 
-    for (tree, _) in yield_tree(topdowns.clone(), cat, start, Box::new(move |e| e == end)) {
-        result = result.pushed_front(tree);
+    let mut result = List::new();
+    for (tree, _) in &yield_tree(topdowns.clone(), cat, start, Box::new(move |e| e == end)) {
+        result = result.pushed_front(tree.clone());
     }
-    result.into_iter()
+    result
 }
 
 fn yield_tree<'a>(topdowns: TopdownMap<'a>, lhs: &'a str, start: usize, test_end: Box<dyn Fn(usize) -> bool>) -> List<(Tree, usize)> {
@@ -136,8 +136,8 @@ fn yield_tree<'a>(topdowns: TopdownMap<'a>, lhs: &'a str, start: usize, test_end
                 start,
                 edge.end
             );
-            for children in yield_children {
-                result = result.pushed_front((Tree::new(lhs, children), edge.end));
+            for children in &yield_children {
+                result = result.pushed_front((Tree::new(lhs, children.clone()), edge.end));
             }
         }
     }
@@ -166,15 +166,15 @@ fn yield_children<'a>(topdowns: TopdownMap<'a>, rhs: Vec<&'a str>, dot: usize, s
                 Box::new(move |e| e < end)
             )
         };
-        for (tree, mid) in yield_tree {
+        for (tree, mid) in &yield_tree {
             let yield_children = yield_children(
                 topdowns.clone(),
                 rhs.clone(),
                 dot + 1,
-                mid,
+                *mid,
                 end
             );
-            for trees in yield_children {
+            for trees in &yield_children {
                 result = result.pushed_front(List::cons(tree.clone(), &trees));
             }
         }
@@ -184,166 +184,166 @@ fn yield_children<'a>(topdowns: TopdownMap<'a>, rhs: Vec<&'a str>, dot: usize, s
 
 type TopdownMap<'a> = RBMap<(&'a str, usize), List<Edge<'a>>>;
 
-pub struct ParseTreeIterator<'a> {
-    chart: Chart<'a>,
-    cat: &'a str,
-    topdowns: TopdownMap<'a>,
-    yield_tree: YieldTreeIterator<'a>,
-}
+// pub struct ParseTreeIterator<'a> {
+//     chart: Chart<'a>,
+//     cat: &'a str,
+//     topdowns: TopdownMap<'a>,
+//     yield_tree: YieldTreeIterator<'a>,
+// }
 
-impl<'a> ParseTreeIterator<'a> {
-    fn new(chart: Chart<'a>, cat: &'a str) -> Self {
-        let topdowns = {
-            let mut topdowns = RBMap::new();
-            let empty_list = List::new();
-            for edgeset in chart.chart.iter() {
-                for edge in edgeset {
-                    if edge.is_passive() {
-                        let edges = topdowns.get_or_default(&(edge.lhs, edge.start), &empty_list).pushed_front(edge.clone());
-                        topdowns = topdowns.inserted_or_replaced((edge.lhs, edge.start), edges);
-                    }
-                }
-            }
-            topdowns
-        };
-        let end = chart.chart.len() - 1;
-        let yield_tree = YieldTreeIterator::new(topdowns.clone(), cat, 0, Box::new(move |e| e == end) );
-        ParseTreeIterator { chart, cat, topdowns, yield_tree }
-    }
-}
+// impl<'a> ParseTreeIterator<'a> {
+//     fn new(chart: Chart<'a>, cat: &'a str) -> Self {
+//         let topdowns = {
+//             let mut topdowns = RBMap::new();
+//             let empty_list = List::new();
+//             for edgeset in chart.chart.iter() {
+//                 for edge in edgeset {
+//                     if edge.is_passive() {
+//                         let edges = topdowns.get_or_default(&(edge.lhs, edge.start), &empty_list).pushed_front(edge.clone());
+//                         topdowns = topdowns.inserted_or_replaced((edge.lhs, edge.start), edges);
+//                     }
+//                 }
+//             }
+//             topdowns
+//         };
+//         let end = chart.chart.len() - 1;
+//         let yield_tree = YieldTreeIterator::new(topdowns.clone(), cat, 0, Box::new(move |e| e == end) );
+//         ParseTreeIterator { chart, cat, topdowns, yield_tree }
+//     }
+// }
 
-impl<'a> Iterator for ParseTreeIterator<'a> {
-    type Item = Tree;
+// impl<'a> Iterator for ParseTreeIterator<'a> {
+//     type Item = Tree;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        println!("ParseTreeIterator::next");
-        match self.yield_tree.next() {
-            None => None,
-            Some(tree) => Some(tree),
-        }
-    }
-}
+//     fn next(&mut self) -> Option<Self::Item> {
+//         println!("ParseTreeIterator::next");
+//         match self.yield_tree.next() {
+//             None => None,
+//             Some(tree) => Some(tree),
+//         }
+//     }
+// }
 
-struct YieldTreeIterator<'a> {
-    topdowns: TopdownMap<'a>,
-    lhs: &'a str,
-    start: usize,
-    test_end: Box<dyn Fn(usize) -> bool>,
-    edge_iter: ListIterator<Edge<'a>>,
-    yield_children: YieldChildrenIterator<'a>,
-    edge: Option<Edge<'a>>,
-}
+// struct YieldTreeIterator<'a> {
+//     topdowns: TopdownMap<'a>,
+//     lhs: &'a str,
+//     start: usize,
+//     test_end: Box<dyn Fn(usize) -> bool>,
+//     edge_iter: Box<dyn Iterator<Item = &'a Edge<'a>>>,
+//     yield_children: YieldChildrenIterator<'a>,
+//     edge: Option<Edge<'a>>,
+// }
 
-impl<'a> YieldTreeIterator<'a> {
-    fn new(topdowns: TopdownMap<'a>, lhs: &'a str, start: usize, test_end: Box<dyn Fn(usize) -> bool>) -> Self {
-        let yield_children = YieldChildrenIterator::empty();
-        let edge_iter = topdowns.get_or_default(&(lhs, start), &List::new()).into_iter();
-        let edge = None;
-        YieldTreeIterator { topdowns, lhs, start, test_end, edge_iter, yield_children, edge }
+// impl<'a> YieldTreeIterator<'a> {
+//     fn new(topdowns: TopdownMap<'a>, lhs: &'a str, start: usize, test_end: Box<dyn Fn(usize) -> bool>) -> Self {
+//         let yield_children = YieldChildrenIterator::empty();
+//         let edge_iter = Box::new(topdowns.get_or_default(&(lhs, start), &List::new()).into_iter());
+//         let edge = None;
+//         YieldTreeIterator { topdowns, lhs, start, test_end, edge_iter, yield_children, edge }
 
-    }
-}
+//     }
+// }
 
-impl<'a> Iterator for YieldTreeIterator<'a> {
-    type Item = Tree;
+// impl<'a> Iterator for YieldTreeIterator<'a> {
+//     type Item = Tree;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        println!("YieldTreeIterator::next");
-        if self.yield_children.is_empty() {
-            loop {
-                match &self.edge_iter.next() {
-                    None => { return None; },
-                    Some(edge) => {
-                        println!("{:?}", edge);
-                        if (self.test_end)(edge.end) {
-                            self.edge = Some(edge.clone());
-                            self.yield_children = YieldChildrenIterator::new(
-                                self.topdowns.clone(),
-                                edge.rhs.clone(),
-                                0,
-                                self.start,
-                                edge.end
-                            );
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        if !self.yield_children.is_empty() {
-            match self.yield_children.next() {
-                None => (),
-                Some(children) => {
-                    return Some(Tree::new(self.lhs, children));
-                }
-            } 
-        }
-        None
-    }
-}
+//     fn next(&mut self) -> Option<Self::Item> {
+//         println!("YieldTreeIterator::next");
+//         if self.yield_children.is_empty() {
+//             loop {
+//                 match &self.edge_iter.next() {
+//                     None => { return None; },
+//                     Some(edge) => {
+//                         println!("{:?}", edge);
+//                         if (self.test_end)(edge.end) {
+//                             self.edge = Some(edge.clone());
+//                             self.yield_children = YieldChildrenIterator::new(
+//                                 self.topdowns.clone(),
+//                                 edge.rhs.clone(),
+//                                 0,
+//                                 self.start,
+//                                 edge.end
+//                             );
+//                             break;
+//                         }
+//                     }
+//                 }
+//             }
+//         }
+//         if !self.yield_children.is_empty() {
+//             match self.yield_children.next() {
+//                 None => (),
+//                 Some(children) => {
+//                     return Some(Tree::new(self.lhs, children));
+//                 }
+//             }
+//         }
+//         None
+//     }
+// }
 
-struct YieldChildrenIterator<'a> {
-    rhs: Option<Vec<&'a str>>,
-    //yield_tree: YieldTreeIterator<'a>,
-    mid: usize,
-    tree: Option<Tree>,
-    
-}
+// struct YieldChildrenIterator<'a> {
+//     rhs: Option<Vec<&'a str>>,
+//     //yield_tree: YieldTreeIterator<'a>,
+//     mid: usize,
+//     tree: Option<Tree>,
 
-impl<'a> YieldChildrenIterator<'a> {
-    fn empty() -> Self {
-        YieldChildrenIterator { 
-            rhs: None,
-            //yield_tree: YieldTreeIterator<'a>,
-            mid: 0,
-            tree: None,
-        }
-    }
+// }
 
-    fn new(topdowns: TopdownMap<'a>, rhs: Vec<&'a str>, dot: usize, start: usize, end: usize) -> Self {
-        let yield_tree = if dot == rhs.len() - 1 {
-            YieldTreeIterator::new(
-                topdowns.clone(),
-                rhs[dot],
-                start,
-                Box::new( move |e| e == end )
-            )
-        } else {
-            YieldTreeIterator::new(
-                topdowns.clone(),
-                rhs[dot],
-                start,
-                Box::new( move |e| e < end )
-            )
-        };
-        YieldChildrenIterator {
-            rhs: Some(rhs),
-            //yield_tree: yield_tree,
-            mid: 0,
-            tree: None,
-        }
-    }
+// impl<'a> YieldChildrenIterator<'a> {
+//     fn empty() -> Self {
+//         YieldChildrenIterator {
+//             rhs: None,
+//             //yield_tree: YieldTreeIterator<'a>,
+//             mid: 0,
+//             tree: None,
+//         }
+//     }
 
-    fn is_empty(&self) -> bool {
-        match &self.rhs {
-            None => true,
-            _ => false,
-        }
-    }
-}
+//     fn new(topdowns: TopdownMap<'a>, rhs: Vec<&'a str>, dot: usize, start: usize, end: usize) -> Self {
+//         let yield_tree = if dot == rhs.len() - 1 {
+//             YieldTreeIterator::new(
+//                 topdowns.clone(),
+//                 rhs[dot],
+//                 start,
+//                 Box::new( move |e| e == end )
+//             )
+//         } else {
+//             YieldTreeIterator::new(
+//                 topdowns.clone(),
+//                 rhs[dot],
+//                 start,
+//                 Box::new( move |e| e < end )
+//             )
+//         };
+//         YieldChildrenIterator {
+//             rhs: Some(rhs),
+//             //yield_tree: yield_tree,
+//             mid: 0,
+//             tree: None,
+//         }
+//     }
 
-impl<'a> Iterator for YieldChildrenIterator<'a> {
-    type Item = List<Tree>;
+//     fn is_empty(&self) -> bool {
+//         match &self.rhs {
+//             None => true,
+//             _ => false,
+//         }
+//     }
+// }
 
-    fn next(&mut self) -> Option<Self::Item> {
-        println!("YieldChildrenIterator::next");
-//        match self.yield_tree.next() {
-//            None => None,
-//            Some(tree) => List::cons(tree, List::new()),
-//        }
-        None
-    }
-}
+// impl<'a> Iterator for YieldChildrenIterator<'a> {
+//     type Item = List<Tree>;
+
+//     fn next(&mut self) -> Option<Self::Item> {
+//         println!("YieldChildrenIterator::next");
+// //        match self.yield_tree.next() {
+// //            None => None,
+// //            Some(tree) => List::cons(tree, List::new()),
+// //        }
+//         None
+//     }
+// }
 #[derive(Clone, Debug)]
 pub struct Tree {
     root: String,
@@ -352,9 +352,9 @@ pub struct Tree {
 
 impl Tree {
     pub fn new(root: &str, children: List<Tree>) -> Self {
-        Tree { 
-            root: root.to_string(),  
-            children: children 
+        Tree {
+            root: root.to_string(),
+            children: children
         }
     }
 

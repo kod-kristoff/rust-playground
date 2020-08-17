@@ -51,7 +51,7 @@ fn main() {
                 Rule { lhs: String::from("Noun"), rhs: vec!(String::from("tree"),) },
                 Rule { lhs: String::from("Noun"), rhs: vec!(String::from("park"),) },
                 Rule { lhs: String::from("Noun"), rhs: vec!(String::from("telescope"),) },
-            ) 
+            )
         }
     };
     // let grammar = parser::Grammar { rules };
@@ -129,7 +129,7 @@ fn main() {
     );
     println!("earley2, elapsed time: {:.6?}", now.elapsed());
 
-    for tree in parse(&grammar, "S", &parser::example(3)) {
+    for tree in parse(&grammar, "S", &parser::example(3)).iter() {
         println!("{}", tree);
     }
 
@@ -299,7 +299,7 @@ mod parser {
         result
     }
 
-    
+
 
 //    pub fn earley3<'a>(grammar: &'a [Rule], input: &[&'a str]) -> Chart<'a> {
 //        let leftcorners = leftcorners_dict(grammar);

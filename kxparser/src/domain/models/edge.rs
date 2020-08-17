@@ -2,7 +2,7 @@ use std::{
     cmp,
     fmt,
 };
-use ds_13::list::List;
+use ds_13::unsync::list::List;
 
 #[derive(Debug, Eq, Hash, PartialEq, Clone)]
 pub struct Edge<'a> {
@@ -127,7 +127,7 @@ mod tests {
     fn edge_without_rhs_is_passive() {
         let edge = Edge::new(0, 2, "S", None, 0);
 
-        assert!(edge.is_passive());    
+        assert!(edge.is_passive());
     }
 
     #[test]
