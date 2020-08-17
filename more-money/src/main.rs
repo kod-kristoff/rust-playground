@@ -1,6 +1,13 @@
+use ds_13::{
+    list,
+    unsync::{
+        list::{List, reverse}
+    },
+};
 use persi_ds::{
-    list, 
-    list::{List, reverse},
+    pair::{Pair, make_pair},
+};
+use statelist::{
     state_list::{
         eval_state_list,
         make_state_list,
@@ -11,7 +18,6 @@ use persi_ds::{
         PairList,
         StateList
     },
-    pair::{Pair, make_pair},
 };
 use std::fmt;
 
@@ -47,7 +53,7 @@ fn solve_constraints() {
 
 // fn solve<'a>() -> persi_ds::state_list::StateList<'a, List<i32>, Triple<i32, i32, i32>> {
 //     let sel = make_state_list(&select::<i32>);
-// 
+//
 //     mbind(&sel, |s|
 //     mbind(&sel, |e|
 //     mbind(&sel, move |n|
@@ -72,12 +78,12 @@ fn select<A: Copy>(lst: &List<A>) -> PairList<List<A>, A> {
         None => PairList::empty(),
         Some(x) => {
             let mut result = PairList::empty();
-            for p in select(&lst.pop_front()).into_iter() {
+            for p in select(&lst.popped_front()).into_iter() {
                 let y = p.first;
                 // let ys = p.second;
-                result = result.push_front(make_pair(y, p.second.push_front(*x)))
+                result = result.pushed_front(make_pair(y, p.second.pushed_front(*x)))
             }
-            result.push_front(make_pair(*x, lst.pop_front().clone()))
+            result.pushed_front(make_pair(*x, lst.popped_front().clone()))
         }
     }
 }

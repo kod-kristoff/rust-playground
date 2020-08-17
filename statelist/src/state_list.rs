@@ -1,5 +1,5 @@
 use std::rc::Rc;
-use ds_13::list::{concat_all, fmap, List};
+use ds_13::unsync::list::{concat_all, fmap, List};
 
 pub type PairList<State, A> = List<(A, State)>;
 
@@ -70,7 +70,7 @@ pub fn guard<'a, State: Clone>(b: bool) -> StateList<'a, State, ()> {
 mod tests {
     use super::*;
     use ds_13::list;
-    use ds_13::list::{reverse};
+    // use ds_13::list::{reverse};
 
     fn select(lst: &List<i32>) -> PairList<List<i32>, i32> {
         match lst.front() {
@@ -78,10 +78,10 @@ mod tests {
             Some(x) => {
 
                 let mut result = PairList::empty();
-                for (y, ys) in select(&lst.pop_front()).into_iter() {
-                    result = result.push_front((*y, ys.push_front(*x)))
+                for (y, ys) in select(&lst.popped_front()).into_iter() {
+                    result = result.pushed_front((*y, ys.pushed_front(*x)))
                 }
-                result.push_front((*x, lst.pop_front().clone()))
+                result.pushed_front((*x, lst.popped_front().clone()))
             }
 
         }
@@ -95,7 +95,7 @@ mod tests {
 
         assert!(plst.is_empty());
     }
-    
+
     #[test]
     fn select_w_singleton_list_returns_singleton_pairlist() {
         let lst = list!(2);
@@ -133,7 +133,7 @@ mod tests {
                 (2, list!(1, 3))
             )
         );
-        
+
     }
     #[test]
     fn run_state_list_creates_something() {
@@ -156,7 +156,7 @@ mod tests {
             eval_state_list(&sel, &state),
             list!(2, 3, 1)
         );
-    } 
+    }
 
     #[test]
     fn mreturn_creates_statelist_that_can_run() {
@@ -178,8 +178,8 @@ mod tests {
     fn mbind_combines_statelists_that_can_run() {
         let sel = make_state_list(&select);
 
-        let sl = 
-            mbind(make_state_list(&select), |i| 
+        let sl =
+            mbind(make_state_list(&select), |i|
                 mbind(make_state_list(&select), move |j|
                     mreturn((i, j))
             )
@@ -274,7 +274,7 @@ mod tests {
 
         let sl = mbind(make_state_list(&select), |i|
             mbind(make_state_list(&select), move |j| {
-                mthen(guard(i + j != 3), move |_| 
+                mthen(guard(i + j != 3), move |_|
                     mreturn((i, j))
                 )
             })
@@ -310,9 +310,9 @@ mod tests {
         let sel = make_state_list(&select);
 
         let sl = mbind(make_state_list(&select), |i|
-            mbind(make_state_list(&select), move |j| 
-                mbind(make_state_list(&select), move |k| 
-                mthen(guard(i + j == 3), move |_| 
+            mbind(make_state_list(&select), move |j|
+                mbind(make_state_list(&select), move |k|
+                mthen(guard(i + j == 3), move |_|
                     mreturn((i + j, k))
                 )
             )
@@ -332,6 +332,6 @@ mod tests {
                     List::empty()
                 )
             )
-        );    
+        );
     }
 }

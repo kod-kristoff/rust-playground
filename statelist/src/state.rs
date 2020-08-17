@@ -1,8 +1,8 @@
-use std::from::From;
+use std::convert::From;
 use ds_13::list;
-use ds_13::list::{List, reverse};
+use ds_13::unsync::list::{List, reverse};
 
-type Plan<State, A> = dyn Fn(&State) -> Pair<A, State>;
+type Plan<State, A> = Box<dyn Fn(&State) -> (A, State)>;
 // type Plan<'a, State, A> = Box<dyn Fn(&State) -> (A, State) + 'a>;
 //pub struct Plan<State, A>
 //{
@@ -21,18 +21,18 @@ pub fn run_plan<State, A>(pl: Plan<State, A>, s: &State) -> (A, State) {
 }
 
 pub fn mreturn<'a, State: Clone, A: Copy + 'a>(a: A) -> Plan<State, A> {
-    |s: &State| { 
-        (a, s.clone()) 
+    |s: &State| {
+        (a, s.clone())
     }
 }
 
-pub fn mbind<'a, State: 'a, A: 'a, B>(pl: &'a Plan<'a, State, A>, k: impl Fn(A) -> Plan<'a, State, B> + 'a) -> Plan<'a, State, B> {
+pub fn mbind<'a, State: 'a, A: 'a, B>(pl: &'a Plan<State, A>, k: impl Fn(A) -> Plan<State, B> + 'a) -> Plan<State, B> {
     Box::new(move |s: &State| {
         let (a, s1) = run_plan(Box::new(pl), s);
         let pl_b = k(a);
         run_plan(pl_b, &s1)
     })
-} 
+}
 
 #[cfg(test)]
 mod tests {
@@ -41,7 +41,7 @@ mod tests {
     fn select(lst: &List<i32>) -> (i32, List<i32>) {
         match lst.front() {
             None => (-1, List::empty()),
-            Some(x) => (*x, lst.pop_front())
+            Some(x) => (*x, lst.popped_front())
         }
     }
 
