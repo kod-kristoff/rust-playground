@@ -92,16 +92,36 @@ impl<T: Clone> RBTree<T> {
     where
         T: PartialOrd,
     {
-        let t = self.ins(x);
-        RBTree::tree(Colour::Black, t.root().unwrap().clone(), &t.left(), &t.right())
+        RBTree { root: link_inserted(&self.root, x) }
+//        match &self.root {
+//            None => RBTree::leaf(x),
+//            Some(root) => {
+//                let t = root.ins(x);
+//                RBTree {
+//                    root:  Some(Rc::new(
+//                        RBNode {
+//                            colour: Colour::Black,
+//                            element: t.element.clone(),
+//                            left: t.left.clone(),
+//                            right: t.right.clone()
+//                        }
+//                    ))
+//                }
+//            }
+//        }
+        // let t = self.ins(x);
+        // RBTree::tree(Colour::Black, t.root().unwrap().clone(), &t.left(), &t.right())
     }
 
     pub fn inserted_or_replaced(&self, x: T) -> Self 
     where
         T: PartialOrd,
     {
-        let t = self.ins_or_rep(x);
-        RBTree::tree(Colour::Black, t.root().unwrap().clone(), &t.left(), &t.right())
+        RBTree { 
+            root: link_inserted_or_replaced(&self.root, x) 
+        }
+        // let t = self.ins_or_rep(x);
+        // RBTree::tree(Colour::Black, t.root().unwrap().clone(), &t.left(), &t.right())
     }
 
     pub fn contains<U>(&self, x: &U) -> bool
@@ -316,15 +336,220 @@ impl<T> RBNode<T> {
             Some(&self.element)
         }
     }
+    fn doubled_left(&self) -> bool {
+        self.colour == Colour::Red
+        && self.left.as_ref().map_or(
+            false, |node| node.colour == Colour::Red)
+    }
+
+    fn doubled_right(&self) -> bool {
+        self.colour == Colour::Red
+        && self.right.as_ref().map_or(
+            false, |node| node.colour == Colour::Red)
+    }
+
+}
+fn link_inserted<T>(link: &Link<T>, x: T) -> Link<T>
+where
+    T: Clone + PartialOrd,
+{
+    let new_link = sorted_insert(link, x);
+    paint_link(&new_link, Colour::Black)
+}
+
+fn link_inserted_or_replaced<T>(link: &Link<T>, x: T) -> Link<T>
+where
+    T: Clone + PartialOrd,
+{
+    let new_link = sorted_insert_or_replace(link, x);
+    paint_link(&new_link, Colour::Black)
+}
+
+fn sorted_insert<T>(link: &Link<T>, x: T) -> Link<T>
+where
+    T: Clone + PartialOrd,
+{
+    match link {
+        None => make_leaf_link(x),
+        Some(node) => {
+            if x < node.element {
+                balance_link(
+                    node.colour,
+                    node.element.clone(),
+                    sorted_insert(&node.left.clone(), x),
+                    node.right.clone()
+                )
+            } else if x > node.element {
+                balance_link(
+                    node.colour,
+                    node.element.clone(),
+                    node.left.clone(),
+                    sorted_insert(&node.right.clone(), x)
+                )
+            } else {
+                link.clone()
+            }
+        }
+    }
+}
+
+fn sorted_insert_or_replace<T>(link: &Link<T>, x: T) -> Link<T>
+where
+    T: Clone + PartialOrd,
+{
+    match link {
+        None => make_leaf_link(x),
+        Some(node) => {
+            if x < node.element {
+                balance_link(
+                    node.colour,
+                    node.element.clone(),
+                    sorted_insert_or_replace(&node.left.clone(), x),
+                    node.right.clone()
+                )
+            } else if x > node.element {
+                balance_link(
+                    node.colour,
+                    node.element.clone(),
+                    node.left.clone(),
+                    sorted_insert_or_replace(&node.right.clone(), x)
+                )
+            } else {
+                make_link(
+                    node.colour,
+                    x,
+                    node.left.clone(),
+                    node.right.clone()
+                )
+            }
+        }
+    }
 }
 
 //fn make_empty_node<T>() -> Rc<RBNode<T>> {
 //    Rc::new(RBNode::Empty)
 //}
 //
-//fn make_leaf_node<T>(x: T) -> Rc<RBNode<T>> {
-//    Rc::new(RBNode::Node(Colour::Red, x, make_empty_node(), make_empty_node()))
-//}
+fn make_leaf_link<T>(element: T) -> Link<T> {
+    Some(Rc::new(
+        RBNode {
+            colour: Colour::Red, 
+            element, 
+            left: None,
+            right: None 
+        }
+    ))
+}
+
+fn make_link<T>(colour: Colour, element: T, left: Link<T>, right: Link<T>) -> Link<T> {
+    Some(Rc::new(
+        RBNode { colour, element, left, right }
+    ))
+}
+
+fn balance_link<T>(c: Colour, x: T, left: Link<T>, right: Link<T>) -> Link<T>
+where
+    T: Clone,
+{
+    use Colour::*;
+    if c == Black && doubled_left(&left) {
+        let node = left.unwrap();
+        make_link(
+            Red,
+            node.element.clone(),
+            paint_link(&node.left, Black),
+            make_link(Black, x, node.right.clone(), right)
+        )
+    } else if c == Black && doubled_right(&left) {
+        let node = left.unwrap();
+        let node_right = node.right.as_ref().unwrap();
+        make_link(
+            Red,
+            node_right.element.clone(),
+            make_link(
+                Black,
+                node.element.clone(),
+                node.left.clone(),
+                node_right.left.clone()
+            ),
+            make_link(
+                Black,
+                x,
+                node_right.right.clone(),
+                right
+            )
+        )
+    } else if c == Black && doubled_left(&right) {
+        let node = right.unwrap();
+        let node_left = node.left.as_ref().unwrap();
+        make_link(
+            Red,
+            node_left.element.clone(),
+            make_link(
+                Black,
+                x,
+                left,
+                node_left.left.clone()
+            ),
+            make_link(
+                Black,
+                node.element.clone(),
+                node_left.right.clone(),
+                node.right.clone()
+            )
+        )
+    } else if c == Black && doubled_right(&right) {
+        let node = right.unwrap();
+        make_link(
+            Red,
+            node.element.clone(),
+            make_link(
+                Black,
+                x,
+                left,
+                node.left.clone()
+            ),
+            paint_link(&node.right, Black)
+        )
+    } else {
+        make_link(c, x, left, right)
+    }
+}
+
+fn doubled_left<T>(link: &Link<T>) -> bool {
+    match link {
+        None => false,
+        Some(node) => {
+            node.colour == Colour::Red
+            && node.left.as_ref().map_or(false, |node| node.colour == Colour::Red)
+        }
+    }
+}
+
+fn doubled_right<T>(link: &Link<T>) -> bool {
+    match link {
+        None => false,
+        Some(node) => {
+            node.colour == Colour::Red
+            && node.right.as_ref().map_or(false, |node| node.colour == Colour::Red)
+        }
+    }
+}
+
+fn paint_link<T>(link: &Link<T>, colour: Colour) -> Link<T>
+where
+    T: Clone,
+{
+    link.as_ref().map(|node| Rc::new(
+            RBNode { 
+                colour,
+                element: node.element.clone(),
+                left: node.left.clone(),
+                right: node.right.clone()
+            }
+        )
+    )
+}
 
 impl<T: PartialEq + Clone> PartialEq for RBTree<T> {
     fn eq(&self, other: &Self) -> bool {
