@@ -89,7 +89,7 @@ impl<T> List<T>
 }
 
 #[macro_export]
-macro_rules! list {
+macro_rules! unsynced_list {
     ( $( $x:expr ),* ) => {
         {
             let mut temp_list = List::empty();
@@ -332,11 +332,11 @@ mod tests {
 
     #[test]
     fn list_macro_creates_list_in_reversed_order() {
-        let l1 = list!(1);
+        let l1 = unsynced_list!(1);
         assert_eq!(l1.front(), Some(&1));
         assert!(l1.popped_front().is_empty());
 
-        let l2 = list!(1, 2);
+        let l2 = unsynced_list!(1, 2);
         assert_eq!(l2.front(), Some(&2));
         assert_eq!(l2.popped_front().front(), Some(&1));
         assert!(l2.popped_front().popped_front().is_empty());
@@ -348,21 +348,21 @@ mod tests {
             v % 2 == 0
         }
 
-        let list = list!(4, 3, 2, 1);
+        let list = unsynced_list!(4, 3, 2, 1);
 
         let evens = filter(even, &list);
 
-        assert_eq!(evens, list!(4, 2));
+        assert_eq!(evens, unsynced_list!(4, 2));
 
     }
 
     #[test]
     fn test_partial_eq() {
-        let l1 = list!(1, 2, 3);
+        let l1 = unsynced_list!(1, 2, 3);
 
         assert_eq!(l1, l1);
         assert_eq!(List::<i32>::empty(), List::<i32>::empty());
-        assert_eq!(list!(5, 7, 0), list!(5, 7, 0));
+        assert_eq!(unsynced_list!(5, 7, 0), unsynced_list!(5, 7, 0));
     }
 
     #[test]
@@ -371,11 +371,11 @@ mod tests {
             v * 2
         }
 
-        let list = list!(4, 3, 2, 1);
+        let list = unsynced_list!(4, 3, 2, 1);
 
         let doubles = fmap(double, &list);
 
-        assert_eq!(doubles, list!(2, 4, 6, 8));
+        assert_eq!(doubles, unsynced_list!(2, 4, 6, 8));
 
     }
 
@@ -385,7 +385,7 @@ mod tests {
             a + b
         }
 
-        let list = list!(4, 3, 2, 1);
+        let list = unsynced_list!(4, 3, 2, 1);
 
         assert_eq!(
             foldl(sum, 0, &list), 
@@ -398,6 +398,6 @@ mod tests {
     fn mreturn_creates_list() {
         let list = mreturn(3);
 
-        assert_eq!(list, list!(3));
+        assert_eq!(list, unsynced_list!(3));
     }
 }

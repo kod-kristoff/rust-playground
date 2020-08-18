@@ -1,5 +1,4 @@
 use std::rc::Rc;
-use crate::list;
 use crate::unsync::list::List;
 
 #[derive(Debug)]
@@ -85,6 +84,7 @@ enum TreeNode<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::unsynced_list;
 
     #[test]
     fn new_creates_empty_tree() {
@@ -114,7 +114,7 @@ mod tests {
 
     #[test]
     fn tree_creates_tree_w_children() {
-        let children = list!(
+        let children = unsynced_list!(
             Tree::leaf("b"),
             Tree::leaf("c")
         );
@@ -133,19 +133,19 @@ mod tests {
         let t3 = Tree::leaf(4);
         let t4 = Tree::tree(
             4,
-            &list!(
+            &unsynced_list!(
                 Tree::leaf(5)
             )
         );
         let t5 = Tree::tree(
             4,
-            &list!(
+            &unsynced_list!(
                 Tree::leaf(5)
             )
         );
         let t6 = Tree::tree(
             4,
-            &list!(
+            &unsynced_list!(
                 Tree::leaf(6)
             )
         );
