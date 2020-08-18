@@ -2,11 +2,11 @@ use std::thread;
 use std::sync::mpsc;
 
 use ds_13::sync::list::{foldl, List};
-use ds_13::list_synced;
+use ds_13::synced_list;
 
 #[test]
 fn test_clone_in_thread() {
-    let list = list_synced!(3, 4);
+    let list = synced_list!(3, 4);
 
     let list_clone = list.clone();
     let handle = thread::spawn(move || {
@@ -22,12 +22,12 @@ fn send_list() {
     let (tx, rx) = mpsc::channel();
 
     thread::spawn(move || {
-        let list = list_synced!(1, 2, 3, 4);
+        let list = synced_list!(1, 2, 3, 4);
 
         tx.send(list).unwrap();
     });
 
     let list = rx.recv().unwrap();
 
-    assert_eq!(list, list_synced!(1, 2, 3, 4));
+    assert_eq!(list, synced_list!(1, 2, 3, 4));
 }

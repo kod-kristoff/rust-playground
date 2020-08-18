@@ -87,7 +87,7 @@ impl<T> List<T>
 }
 
 #[macro_export]
-macro_rules! list_synced {
+macro_rules! synced_list {
     ( $( $x:expr ),* ) => {
         {
             let mut temp_list = List::empty();
@@ -330,11 +330,11 @@ mod tests {
 
     #[test]
     fn list_macro_creates_list_in_reversed_order() {
-        let l1 = list_synced!(1);
+        let l1 = synced_list!(1);
         assert_eq!(l1.front(), Some(&1));
         assert!(l1.popped_front().is_empty());
 
-        let l2 = list_synced!(1, 2);
+        let l2 = synced_list!(1, 2);
         assert_eq!(l2.front(), Some(&2));
         assert_eq!(l2.popped_front().front(), Some(&1));
         assert!(l2.popped_front().popped_front().is_empty());
@@ -346,23 +346,23 @@ mod tests {
             v % 2 == 0
         }
 
-        let list = list_synced!(4, 3, 2, 1);
+        let list = synced_list!(4, 3, 2, 1);
 
         let evens = filter(even, &list);
 
-        assert_eq!(evens, list_synced!(4, 2));
+        assert_eq!(evens, synced_list!(4, 2));
 
     }
 
     #[test]
     fn test_partial_eq() {
-        let l1 = list_synced!(1, 2, 3);
+        let l1 = synced_list!(1, 2, 3);
 
         assert_eq!(l1, l1);
         assert_eq!(List::<i32>::empty(), List::<i32>::empty());
         assert_eq!(
-            list_synced!(5, 7, 0), 
-            list_synced!(5, 7, 0));
+            synced_list!(5, 7, 0), 
+            synced_list!(5, 7, 0));
     }
 
     #[test]
@@ -371,11 +371,11 @@ mod tests {
             v * 2
         }
 
-        let list = list_synced!(4, 3, 2, 1);
+        let list = synced_list!(4, 3, 2, 1);
 
         let doubles = fmap(double, &list);
 
-        assert_eq!(doubles, list_synced!(2, 4, 6, 8));
+        assert_eq!(doubles, synced_list!(2, 4, 6, 8));
 
     }
 
@@ -385,7 +385,7 @@ mod tests {
             a + b
         }
 
-        let list = list_synced!(4, 3, 2, 1);
+        let list = synced_list!(4, 3, 2, 1);
 
         assert_eq!(
             foldl(sum, 0, &list), 
@@ -398,6 +398,6 @@ mod tests {
     fn mreturn_creates_list() {
         let list = mreturn(3);
 
-        assert_eq!(list, list_synced!(3));
+        assert_eq!(list, synced_list!(3));
     }
 }
