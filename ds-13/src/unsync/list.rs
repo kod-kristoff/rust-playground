@@ -17,14 +17,28 @@ pub struct Node<T> {
 
 impl<T> List<T> 
 {
-    pub fn empty() -> List<T> {
-        List { head: None }
-    }
-
+    /// Creates an empty `List``.
+    ///
+    /// # Examples
+    /// ```
+    /// use ds_13::unsync::List;
+    /// let list: List<u32> = List::new();
+    /// ```
     pub fn new() -> List<T> {
         List { head: None }
     }
 
+    /// Creates a list with the element given as head 
+    /// and the provided list as tail.
+    ///
+    /// Complexity: O(1)
+    ///
+    /// # Examples
+    /// ```
+    /// use ds_13::unsync::List;
+    ///
+    /// let list = List::cons(1, &List::new());
+    /// ```
     pub fn cons(element: T, tail: &List<T>) -> List<T> {
         List { 
             head: Some(Rc::new( 
@@ -48,14 +62,59 @@ impl<T> List<T>
         }
     }
 
+    /// Provides a reference to the front element, or 
+    /// `None` if the list is empty..
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ds_13::unsync::List;
+    ///
+    /// let l1 = List::<i32>::new();
+    /// assert_eq!(l1.front(), None);
+    ///
+    /// let l2 = List::cons(5, &l1);
+    /// assert_eq!(l2.front(), Some(&5));
+    /// ```
     pub fn front(&self) -> Option<&T> {
         self.head.as_ref().map(|node| &node.element)
     }
 
+    /// Returns `true` if this `List` is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ds_13::unsync::List;
+    ///
+    /// let l1 = List::<i32>::new();
+    /// assert!(l1.is_empty());
+    ///
+    /// let l2 = List::cons(5, &l1);
+    /// assert!(!l2.is_empty());
+    /// ```
     pub fn is_empty(&self) -> bool {
         self.head.is_none()
     }
 
+    /// Returns the tail of the list.
+    ///
+    /// # Panics
+    ///
+    /// This method panics when called on an empty list.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ds_13::unsync::List;
+    ///
+    /// let l1 = List::<i32>::new();
+    /// assert!(l1.is_empty());
+    ///
+    /// let l2 = List::cons(5, &l1);
+    /// assert!(!l2.is_empty());
+    /// assert_eq!(l2.popped_front(), l1);
+    /// ```
     pub fn popped_front(&self) -> List<T> {
         if self.head.is_none() {
             panic!("You can't pop an empty list!");
@@ -92,7 +151,7 @@ impl<T> List<T>
 macro_rules! unsynced_list {
     ( $( $x:expr ),* ) => {
         {
-            let mut temp_list = List::empty();
+            let mut temp_list = List::new();
             $(
                 temp_list = temp_list.pushed_front($x);
              )*
@@ -183,7 +242,7 @@ pub fn filter<T: Copy>(
                 tail
             }
         },
-        None => List::empty()
+        None => List::new()
         
     }
 } 
@@ -191,7 +250,7 @@ pub fn filter<T: Copy>(
 pub fn reverse<T: Clone>(list: &List<T>) -> List<T> {
     foldl(
         |acc: List<T>, v: &T| List::cons(v.clone(), &acc), 
-        List::empty(),
+        List::new(),
         list
     )
 }
@@ -201,13 +260,13 @@ where
     T: Clone,
     U: Clone,
 {
-    let mut result = List::<U>::empty();
+    let mut result = List::<U>::new();
     for x in list {
         result = result.pushed_front(f(&x));
     }
     result
     // match list.front() {
-    //     None => List::<U>::empty(),
+    //     None => List::<U>::new(),
     //     Some(head) => List::cons(f(*head), &fmap(f, &list.popped_front()))
     // }
 }
@@ -253,8 +312,8 @@ pub fn concat<T: Clone>(a: &List<T>, b: &List<T>) -> List<T> {
 }
 
 pub fn concat_all<T: Clone>(xss: &List<List<T>>) -> List<T> {
-    // let result = foldr(|xs, acc| concat(xs, &acc), List::<T>::empty(), xss);
-    let mut result = List::<T>::empty();
+    // let result = foldr(|xs, acc| concat(xs, &acc), List::<T>::new(), xss);
+    let mut result = List::<T>::new();
     for xs in xss {
         for x in xs {
             result = result.pushed_front(x.clone());
@@ -266,7 +325,7 @@ pub fn concat_all<T: Clone>(xss: &List<List<T>>) -> List<T> {
 // List Monad
 pub fn mreturn<T>(t: T) -> List<T> 
 {
-    List::cons(t, &List::empty())
+    List::cons(t, &List::new())
 }
 
 pub fn mbind<A: Copy, B: Copy>(list: &List<A>, k: impl Fn(&A) -> List<B> + Copy) -> List<B> {
@@ -281,7 +340,7 @@ mod tests {
 
     #[test]
     fn create_empty() {
-        let list = List::<i32>::empty();
+        let list = List::<i32>::new();
 
         match &list.head {
             None => assert!(true),
@@ -294,7 +353,7 @@ mod tests {
     #[test]
     fn create_cons() {
 
-        let list = List::cons(3, &List::empty());
+        let list = List::cons(3, &List::new());
 
         assert_eq!(list.front(), Some(&3));
         match &list.head {
@@ -308,8 +367,14 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
+    fn popped_front_on_empty_list_panics() {
+        let list = List::<i32>::new();
+        list.popped_front();
+    }
+    #[test]
     fn pushed_front_creates_new_longer_list() {
-        let l1 = List::empty();
+        let l1 = List::new();
         let l2 = l1.pushed_front(6.7);
 
         assert!(l1.is_empty());
@@ -321,7 +386,7 @@ mod tests {
 
     #[test]
     fn popped_front_returns_tail() {
-        let l1 = List::empty();
+        let l1 = List::new();
         let l2 = List::cons(3, &l1);
         let l3 = List::cons(4, &l2);
 
@@ -361,7 +426,7 @@ mod tests {
         let l1 = unsynced_list!(1, 2, 3);
 
         assert_eq!(l1, l1);
-        assert_eq!(List::<i32>::empty(), List::<i32>::empty());
+        assert_eq!(List::<i32>::new(), List::<i32>::new());
         assert_eq!(unsynced_list!(5, 7, 0), unsynced_list!(5, 7, 0));
     }
 
