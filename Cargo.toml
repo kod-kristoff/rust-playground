@@ -16,6 +16,7 @@ members = [
     "statelist",
     "persi-ds",
     "chart-parser",
+    "running-stats",
 ]
 
 [dependencies]
